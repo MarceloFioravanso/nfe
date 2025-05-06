@@ -1,0 +1,28 @@
+<html>
+<body style="font-family: Arial, sans-serif; color: #333333; line-height: 1.5;">
+  <p>Olá,<br>
+  {{SAUDACAO}}!<br>
+  Prezado(a),</p>
+  
+  <p>Segue anexa a nota fiscal. Observe que os dados para efetuar o depósito encontram-se no campo "Discriminação dos Serviços".</p>
+  
+  <p style="color: #FF0000;">Favor acusar o recebimento deste e-mail.</p>
+  
+  <p>Desde já agradeço!</p>
+  
+  <p>Atenciosamente,</p>
+  
+  <p>
+    <strong style="color: #1A4E8C;">Marcelo Hagelin Fioravanso</strong><br>
+    <span style="color: #1A4E8C;"><strong>La'Fioravanso Consultoria Empresarial</strong></span><br>
+    <span style="color: #1A4E8C;"><em>Embasando Decisões Vencedoras</em></span>
+  </p>
+  
+  <p style="margin-top: 10px;">
+    Av. Gen. Flores da Cunha, 1320, cj. 1205<br>
+    CEP 94.910-002, Cachoerinha/RS<br>
+    Fone: (51) 99775-6607<br>
+    Site: <a href="http://www.lafioravanso.com.br" style="color: #1A4E8C;">www.lafioravanso.com.br</a>
+  </p>
+</body>
+</html>
