@@ -81,14 +81,36 @@ def renomear_arquivos(pasta, empresa_map=None):
             if m:
                 numero = m.group(1)
             else:
-                raise ValueError('número interno não encontrado')
+                logger.warning(f"Regex não encontrou número no PDF {entry.name}")
+                # Segunda tentativa com expressão mais abrangente
+                m = re.search(r'nfs-?e[\s\:]*([0-9]+)', text, re.IGNORECASE)
+                if m:
+                    numero = m.group(1)
+                    logger.info(f"Número encontrado com regex alternativo: {numero}")
+                else:
+                    raise ValueError('número interno não encontrado')
         except Exception as e:
             logger.warning(f"Não foi possível extrair número interno do PDF {entry.name}: {e}")
+            # Salvando conteúdo para debug em caso de falha
+            try:
+                with open(f"/tmp/pdf_content_{entry.name.replace('.pdf', '.txt')}", "w", encoding="utf-8") as f:
+                    f.write(text[:2000])  # Salvando os primeiros 2000 caracteres para debug
+                logger.info(f"Primeiros 2000 caracteres do PDF salvos para debug")
+            except:
+                pass
             continue
+            
+        # Dado que encontramos o número, renomeamos o arquivo
         empresa = empresa_map.get(int(numero)) if empresa_map else None
         sufixo = f" - {empresa}" if empresa else ''
         novo_nome = f"{current_year}_{numero}{sufixo}.pdf"
         novo_caminho = os.path.join(pasta, novo_nome)
+        
+        # Importante: realmente renomear o arquivo fisicamente
+        os.rename(entry.path, novo_caminho)
+        logger.info(f"PDF renomeado: {entry.name} -> {novo_nome}")
+        
+        # Adicionar à lista de arquivos para essa nota
         arquivos_por_nota.setdefault(int(numero), []).append(novo_caminho)
     
     logger.info(f"Arquivos renomeados e mapeados por nota: {arquivos_por_nota}")
