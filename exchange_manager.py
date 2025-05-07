@@ -29,7 +29,7 @@ class ExchangeEmailManager:
         load_dotenv()  # Carregar variáveis de ambiente do .env
         self.email = os.getenv("EMAIL_USUARIO")
         self.password = os.getenv("EMAIL_SENHA")
-        self.server = os.getenv("EMAIL_SERVER")
+        self.server = os.getenv("EXCHANGE_SERVER")  # Corrigido nome da variável
         self.service_endpoint = os.getenv("EMAIL_SERVICE_ENDPOINT") # Endpoint EWS
         self.account = None
         self.tz = EWSTimeZone.localzone()
@@ -48,34 +48,35 @@ class ExchangeEmailManager:
             logger.info(f"Conectando à conta Exchange: {self.email}")
             credentials = Credentials(username=self.email, password=self.password)
 
-            # Tenta autodiscover primeiro se o endpoint não for fornecido
-            if not self.service_endpoint and self.server:
-                 logger.info(f"Tentando autodiscover com servidor {self.server}...")
-                 config = Configuration(server=self.server, credentials=credentials)
-                 self.account = Account(
-                     primary_smtp_address=self.email,
-                     config=config,
-                     autodiscover=False, # Autodiscover explícito não é necessário com config
-                     access_type=DELEGATE
-                 )
-            elif self.service_endpoint:
-                 logger.info(f"Conectando via endpoint EWS: {self.service_endpoint}")
-                 config = Configuration(service_endpoint=self.service_endpoint, credentials=credentials)
-                 self.account = Account(
-                     primary_smtp_address=self.email,
-                     config=config,
-                     autodiscover=False,
-                     access_type=DELEGATE
-                 )
+            # Priorizar a conexão direta via endpoint EWS para maior velocidade
+            if self.service_endpoint:
+                logger.info(f"Conectando via endpoint EWS direto: {self.service_endpoint}")
+                config = Configuration(service_endpoint=self.service_endpoint, credentials=credentials)
+                self.account = Account(
+                    primary_smtp_address=self.email,
+                    config=config,
+                    autodiscover=False,
+                    access_type=DELEGATE
+                )
+            # Usar configuração de servidor sem autodiscover se endpoint não estiver disponível
+            elif self.server:
+                logger.info(f"Usando servidor Exchange configurado: {self.server}")
+                config = Configuration(server=self.server, credentials=credentials)
+                self.account = Account(
+                    primary_smtp_address=self.email,
+                    config=config,
+                    autodiscover=False,
+                    access_type=DELEGATE
+                )
+            # Última opção: usar autodiscover padrão (mais lento)
             else:
-                 # Tenta autodiscover padrão se nem server nem endpoint forem fornecidos
-                 logger.info("Tentando autodiscover padrão...")
-                 self.account = Account(
-                     primary_smtp_address=self.email,
-                     credentials=credentials,
-                     autodiscover=True,
-                     access_type=DELEGATE
-                 )
+                logger.info("Nenhum endpoint ou servidor configurado. Tentando autodiscover padrão...")
+                self.account = Account(
+                    primary_smtp_address=self.email,
+                    credentials=credentials,
+                    autodiscover=True,
+                    access_type=DELEGATE
+                )
 
             # Testa a conexão
             logger.info(f"Pasta raiz: {self.account.root}")
