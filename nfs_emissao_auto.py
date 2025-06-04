@@ -1002,31 +1002,29 @@ def carregar_dados_excel(caminho_excel):
         logger.error(f"Erro ao carregar arquivo Excel: {e}")
         return None
 
-def encontrar_notas_pendentes(df):
+def encontrar_proxima_nota(df):
     """
-    Encontra todas as notas pendentes a serem processadas (linhas sem número na primeira coluna mas com dados válidos).
+    Encontra a próxima nota a ser processada (última linha sem número na primeira coluna mas com dados válidos).
     
     Args:
         df (pd.DataFrame): DataFrame com os dados do Excel
         
     Returns:
-        list: Lista de dicionários com dados das notas pendentes a serem processadas ou lista vazia se não encontrar
+        dict: Dados da próxima nota a ser processada ou None se não encontrar
     """
     try:
         if df is None or df.empty:
             logger.error("DataFrame está vazio ou é None")
-            return []
+            return None
         
-        logger.info("Procurando por notas pendentes a serem processadas...")
+        logger.info("Procurando a próxima nota a ser processada...")
         
         # Assumindo que a primeira coluna contém os números das notas
         primeira_coluna = df.columns[0]
         logger.info(f"Analisando coluna: {primeira_coluna}")
         
-        notas_pendentes = []
-        
-        # Encontra todas as linhas sem número mas que tenham dados válidos
-        for idx in range(len(df)):
+        # Encontra a última linha sem número mas que tenha dados válidos
+        for idx in reversed(range(len(df))):
             linha = df.iloc[idx]
             numero_nota = linha[primeira_coluna]
             empresa = linha['Empresa - Razão Social']
@@ -1036,27 +1034,17 @@ def encontrar_notas_pendentes(df):
             numero_vazio = pd.isna(numero_nota) or numero_nota == "" or numero_nota is None
             
             # Verifica se a linha tem dados válidos (empresa ou CNPJ)
-            tem_dados = not (pd.isna(empresa) or pd.isna(cnpj))
+            tem_dados = not (pd.isna(empresa) and pd.isna(cnpj))
             
             if numero_vazio and tem_dados:
-                logger.info(f"Encontrada nota pendente na posição {idx + 1} (linha {idx + 3} do Excel)")
+                logger.info(f"Encontrada linha sem número na posição {idx + 1} (linha {idx + 3} do Excel)")
                 
-                # Adiciona os dados desta linha como dicionário
+                # Retorna os dados desta linha como dicionário
                 dados_nota = linha.to_dict()
                 
-                notas_pendentes.append({
-                    'linha_excel': idx + 3,  # +3 porque pandas é 0-based, Excel começa na linha 1, e temos 2 linhas de header
-                    'dados': dados_nota
-                })
-        
-        # Log das notas encontradas
-        if notas_pendentes:
-            logger.info(f"Total de {len(notas_pendentes)} notas pendentes encontradas.")
-            
-            # Log com detalhes de cada nota (mascarando informações sensíveis)
-            for i, nota in enumerate(notas_pendentes):
-                logger.info(f"\nDados da nota pendente {i+1} (linha {nota['linha_excel']} do Excel):")
-                for coluna, valor in nota['dados'].items():
+                # Log dos dados encontrados (mascarando informações sensíveis)
+                logger.info("Dados da próxima nota a ser processada:")
+                for coluna, valor in dados_nota.items():
                     if pd.notna(valor) and valor != "":
                         # Mascarar CNPJ se necessário
                         if 'CNPJ' in coluna and len(str(valor)) > 6:
@@ -1064,37 +1052,15 @@ def encontrar_notas_pendentes(df):
                         else:
                             valor_log = valor
                         logger.info(f"  {coluna}: {valor_log}")
-            
-            return notas_pendentes
-        else:
-            logger.warning("Não foi encontrada nenhuma linha sem número com dados válidos. Todas as notas podem já ter sido processadas.")
-            return []
+                
+                return {
+                    'linha_excel': idx + 3,  # +3 porque pandas é 0-based, Excel começa na linha 1, e temos 2 linhas de header
+                    'dados': dados_nota
+                }
         
-    except Exception as e:
-        logger.error(f"Erro ao procurar notas pendentes: {e}")
-        return []
-
-
-def encontrar_proxima_nota(df):
-    """
-    Encontra a próxima nota a ser processada utilizando a função encontrar_notas_pendentes.
-    Mantida para compatibilidade com o código existente.
-    
-    Args:
-        df (pd.DataFrame): DataFrame com os dados do Excel
-        
-    Returns:
-        dict: Dados da próxima nota a ser processada ou None se não encontrar
-    """
-    try:
-        notas_pendentes = encontrar_notas_pendentes(df)
-        if notas_pendentes:
-            logger.info(f"Retornando a primeira nota das {len(notas_pendentes)} notas pendentes encontradas")
-            return notas_pendentes[0]
-        
-        logger.warning("Não foi encontrada nenhuma nota pendente para processamento.")
+        logger.warning("Não foi encontrada nenhuma linha sem número com dados válidos. Todas as notas podem já ter sido processadas.")
         return None
-    
+        
     except Exception as e:
         logger.error(f"Erro ao procurar próxima nota: {e}")
         return None
@@ -1593,11 +1559,12 @@ def preencher_dados_tomador(driver, dados_nota):
                 # Se não encontrou por CSS, tenta por XPath
                 xpath_botoes = [
                     "//button[contains(text(), 'Próximo')]",
-                    "//a[contains(text(), 'Próximo')]",
-                    "//span[contains(text(), 'Próximo')]/parent::button",
-                    "//div[contains(text(), 'Próximo')]/..",
-                    "//button[contains(text(), 'Continuar')]",
-                    "//button[contains(text(), 'Avançar')]"
+                    "//button[contains(@name, 'proximo')]",
+                    "//button[contains(@id, 'proximo')]",
+                    "//button[@myaccesskey='p']",
+                    "//button[contains(@class, 'proximo')]",
+                    "//button[contains(@title, 'Próximo')]",
+                    "//span[contains(text(), 'Próximo')]/parent::button"
                 ]
                 
                 for xpath in xpath_botoes:
@@ -1676,7 +1643,8 @@ def preencher_dados_tomador(driver, dados_nota):
                     # O restante pode ser complemento
                     resto = re.sub(r'\b' + re.escape(numero) + r'\b', '', segunda_parte).strip()
                     if resto:
-                        complemento = (complemento + ' ' + resto).strip() if complemento else resto                else:
+                        complemento = (complemento + ' ' + resto).strip() if complemento else resto
+                else:
                     # Se não houver números na segunda parte, considera tudo como complemento
                     complemento = (complemento + ' ' + segunda_parte).strip() if complemento else segunda_parte
         
@@ -1925,6 +1893,120 @@ def preencher_dados_tomador(driver, dados_nota):
                             # Tenta selecionar por texto primeiro, depois por valor
                             try:
                                 select.select_by_visible_text(str(valor))
+                                logger.info(f"Campo '{nome_campo}' preenchido via select por texto: {valor}")
+                            except:
+                                try:
+                                    select.select_by_value(str(valor))
+                                    logger.info(f"Campo '{nome_campo}' preenchido via select por valor: {valor}")
+                                except:
+                                    logger.warning(f"Não foi possível selecionar '{valor}' no campo '{nome_campo}'")
+                                    continue
+                        else:
+                            # Para inputs normais
+                            simular_digitacao_humana(elemento, str(valor))
+                            logger.info(f"Campo '{nome_campo}' preenchido: {valor}")
+                        
+                        campos_preenchidos += 1
+                        campo_preenchido = True
+                        break
+                        
+                except (TimeoutException, NoSuchElementException):
+                    continue
+                except Exception as e:
+                    logger.warning(f"Erro ao preencher campo '{nome_campo}' com seletor '{seletor}': {e}")
+                    continue
+            
+            if not campo_preenchido and config['obrigatorio']:
+                campos_falharam.append(nome_campo)
+        
+        logger.info(f"Preenchimento concluído: {campos_preenchidos} campos preenchidos")
+        
+        if campos_falharam:
+            logger.error(f"Campos obrigatórios faltando ou vazios: {', '.join(campos_falharam)}")
+            salvar_screenshot(driver, "erro_preenchimento_campos_obrigatorios.png")
+            return False
+        
+        salvar_screenshot(driver, "dados_tomador_preenchidos.png")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Erro ao preencher dados do tomador: {e}")
+        salvar_screenshot(driver, "erro_preenchimento_tomador.png")
+        return False
+
+def preencher_dados_servico(driver, dados_nota):
+    """
+    Preenche os dados do serviço no formulário com base nos dados do Excel.
+    
+    Args:
+        driver: WebDriver do Selenium
+        dados_nota (dict): Dados mapeados da nota fiscal
+        
+    Returns:
+        bool: True se o preenchimento foi bem-sucedido, False caso contrário
+    """
+    try:
+        logger.info("Iniciando preenchimento dos dados do serviço...")
+        wait = WebDriverWait(driver, 10)
+        
+        # Dicionário com mapeamento de campos de serviço
+        campos_servico = {
+            'descricao_servico': {
+                'seletores': ['textarea[name*="descricao"]', 'textarea[id*="descricao"]', 'input[name*="descricao"]'],
+                'valor': dados_nota.get('descricao_servico', ''),
+                'obrigatorio': True
+            },
+            'valor_servico': {
+                'seletores': ['input[name*="valor"]', 'input[id*="valor"]', 'input[name*="servico"]'],
+                'valor': str(dados_nota.get('valor_servico', '')),
+                'obrigatorio': True
+            },
+            'codigo_servico': {
+                'seletores': ['select[name*="codigo"]', 'select[id*="codigo"]', 'input[name*="codigo"]'],
+                'valor': dados_nota.get('codigo_servico', ''),
+                'obrigatorio': False
+            },
+            'aliquota_iss': {
+                'seletores': ['input[name*="aliquota"]', 'input[id*="aliquota"]', 'input[name*="iss"]'],
+                'valor': str(dados_nota.get('aliquota_iss', '')),
+                'obrigatorio': False
+            },
+            'observacoes': {
+                'seletores': ['textarea[name*="observacao"]', 'textarea[id*="observacao"]', 'textarea[name*="obs"]'],
+                'valor': dados_nota.get('observacoes', ''),
+                'obrigatorio': False
+            }
+        }
+        
+        campos_preenchidos = 0
+        campos_falharam = []
+        
+        # Tenta preencher cada campo
+        for nome_campo, config in campos_servico.items():
+            valor = config['valor']
+            
+            # Pula campos vazios ou NaN
+            if not valor or pd.isna(valor) or str(valor).strip() == '':
+                if config['obrigatorio']:
+                    logger.warning(f"Campo obrigatório '{nome_campo}' está vazio")
+                continue
+            
+            campo_preenchido = False
+            
+            # Tenta cada seletor até encontrar um que funcione
+            for seletor in config['seletores']:
+                try:
+                    elemento = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, seletor)))
+                    
+                    # Verifica se o elemento está visível e habilitado
+                    if elemento.is_displayed() and elemento.is_enabled():
+                        # Para selects, tenta selecionar por texto ou valor
+                        if elemento.tag_name == 'select':
+                            from selenium.webdriver.support.ui import Select
+                            select = Select(elemento)
+                            
+                            try:
+                                select.select_by_visible_text(str(valor))
                                 logger.info(f"Campo '{nome_campo}' selecionado: {valor}")
                             except:
                                 try:
@@ -1951,7 +2033,7 @@ def preencher_dados_tomador(driver, dados_nota):
             if not campo_preenchido and config['obrigatorio']:
                 campos_falharam.append(nome_campo)
         
-        logger.info(f"Preenchimento concluído: {campos_preenchidos} campos preenchidos")
+        logger.info(f"Preenchimento dos dados de serviço concluído: {campos_preenchidos} campos preenchidos")
         
         if campos_falharam:
             logger.error(f"Campos obrigatórios que falharam: {', '.join(campos_falharam)}")
@@ -1960,6 +2042,11 @@ def preencher_dados_tomador(driver, dados_nota):
         
         salvar_screenshot(driver, "dados_servico_preenchidos.png")
         return True
+        
+    except Exception as e:
+        logger.error(f"Erro ao preencher dados do serviço: {e}")
+        salvar_screenshot(driver, "erro_preenchimento_servico.png")
+        return False
 
 def procurar_e_clicar(driver, seletores):
     """
@@ -2203,106 +2290,66 @@ def main():
         logger.error("Falha ao carregar dados do Excel. Encerrando automação.")
         return
     
-    # Encontra todas as notas pendentes
-    notas_pendentes = encontrar_notas_pendentes(df_excel)
-    if not notas_pendentes:
+    # Encontra a próxima nota a ser processada
+    proxima_nota = encontrar_proxima_nota(df_excel)
+    if proxima_nota is None:
         logger.info("Nenhuma nota pendente encontrada. Todas as notas podem já ter sido processadas.")
         return
     
-    logger.info(f"Foram encontradas {len(notas_pendentes)} notas pendentes para processamento.")
+    # Mapeia os dados da nota
+    dados_nota = mapear_dados_nota(proxima_nota['dados'])
+    if dados_nota is None:
+        logger.error("Falha ao mapear dados da nota. Encerrando automação.")
+        return
     
-    # Pergunta ao usuário quantas notas deseja processar
-    total_notas = len(notas_pendentes)
-    resposta = input(f"\nForam encontradas {total_notas} notas pendentes. Quantas notas você deseja processar? (Digite um número ou 'todas'): ")
+    linha_excel = proxima_nota['linha_excel']
+    logger.info(f"Nota a ser processada encontrada na linha {linha_excel} do Excel")
+      # Verifica o sistema operacional
+    sistema_operacional = platform.system()
+    logger.info(f"Sistema Operacional detectado: {sistema_operacional}")
     
-    if resposta.lower() == 'todas':
-        notas_para_processar = total_notas
-    else:
-        try:
-            notas_para_processar = int(resposta)
-            if notas_para_processar < 1:
-                logger.warning("Número inválido. Processando apenas 1 nota.")
-                notas_para_processar = 1
-            elif notas_para_processar > total_notas:
-                logger.warning(f"Número excede o total de notas pendentes. Processando todas as {total_notas} notas.")
-                notas_para_processar = total_notas
-        except ValueError:
-            logger.warning("Entrada inválida. Processando apenas 1 nota.")
-            notas_para_processar = 1
-    
-    logger.info(f"Serão processadas {notas_para_processar} nota(s) pendente(s).")
-    
-    # Processa cada nota na sequência
-    for indice_nota in range(notas_para_processar):
-        proxima_nota = notas_pendentes[indice_nota]
+    try:
+        # PASSO 2: INICIANDO O NAVEGADOR
+        logger.info("Configurando navegador...")
         
-        logger.info(f"\n{'='*40}")
-        logger.info(f"PROCESSANDO NOTA {indice_nota + 1} DE {notas_para_processar}")
-        logger.info(f"{'='*40}")
+        # Configurações do Chrome
+        chrome_opts = Options()
+        chrome_opts.add_argument("--start-maximized")
+        chrome_opts.add_argument("--disable-notifications")
         
-        # Mapeia os dados da nota
-        dados_nota = mapear_dados_nota(proxima_nota['dados'])
-        if dados_nota is None:
-            logger.error(f"Falha ao mapear dados da nota {indice_nota + 1}. Pulando para a próxima.")
-            continue
+        # Inicia o navegador
+        driver = webdriver.Chrome(options=chrome_opts)
+        logger.info("Navegador iniciado com sucesso!")
         
-        linha_excel = proxima_nota['linha_excel']
-        logger.info(f"Nota a ser processada encontrada na linha {linha_excel} do Excel")
+        # PASSO 3: NAVEGANDO PARA A PÁGINA INICIAL
+        logger.info(f"Acessando URL: {NFS_URL}")
+        driver.get(NFS_URL)
         
-        # Verifica o sistema operacional
-        sistema_operacional = platform.system()
-        logger.info(f"Sistema Operacional detectado: {sistema_operacional}")
+        # Aguarda carregamento da página
+        esperar_pagina_carregar(driver, timeout=30)
+          # Captura estado inicial
+        salvar_screenshot(driver, "pagina_inicial.png")
+        logger.info(f"Screenshot inicial salvo em {obter_caminho_absoluto('logs/imagens/pagina_inicial.png')}")
         
-        try:
-            # PASSO 2: INICIANDO O NAVEGADOR (apenas para a primeira nota)
-            if indice_nota == 0:
-                logger.info("Configurando navegador...")
-                
-                # Configurações do Chrome
-                chrome_opts = Options()
-                chrome_opts.add_argument("--start-maximized")
-                chrome_opts.add_argument("--disable-notifications")
-                
-                # Inicia o navegador
-                driver = webdriver.Chrome(options=chrome_opts)
-                logger.info("Navegador iniciado com sucesso!")
-                
-                # PASSO 3: NAVEGANDO PARA A PÁGINA INICIAL
-                logger.info(f"Acessando URL: {NFS_URL}")
-                driver.get(NFS_URL)
-                
-                # Aguarda carregamento da página
-                esperar_pagina_carregar(driver, timeout=30)
-                
-                # Captura estado inicial
-                salvar_screenshot(driver, "pagina_inicial.png")
-                logger.info(f"Screenshot inicial salvo")
-                
-                # Log informativo
-                logger.info(f"Título da página: {driver.title}")
-                logger.info(f"URL atual: {driver.current_url}")
-                
-                # Salvar HTML inicial
-                salvar_html(driver, "pagina_inicial")
-                
-                # PASSO 3: PROCESSO DE LOGIN
-                logger.info("Iniciando processo de login...")
-                login_sucesso = realizar_login(driver, CPF_CNPJ, SENHA)
-                
-                if not login_sucesso:
-                    logger.error("Falha no login. Impossível continuar a automação.")
-                    return
-                
-                logger.info("LOGIN REALIZADO COM SUCESSO!")
-                
-                # PASSO 4: ACESSAR ÁREA FISCAL
-                logger.info("Tentando acessar área fiscal...")
-                acessar_sucesso = clicar_acessar_fiscal(driver)
-                
-                if not acessar_sucesso:
-                    logger.error("Não foi possível acessar a área fiscal. Impossível continuar.")
-                    return
-                
+        # Log informativo
+        logger.info(f"Título da página: {driver.title}")
+        logger.info(f"URL atual: {driver.current_url}")
+        
+        # Salvar HTML inicial
+        salvar_html(driver, "pagina_inicial")
+        
+        # PASSO 3: PROCESSO DE LOGIN
+        logger.info("Iniciando processo de login...")
+        login_sucesso = realizar_login(driver, CPF_CNPJ, SENHA)
+        
+        if login_sucesso:
+            logger.info("LOGIN REALIZADO COM SUCESSO!")
+            
+            # PASSO 4: ACESSAR ÁREA FISCAL
+            logger.info("Tentando acessar área fiscal...")
+            acessar_sucesso = clicar_acessar_fiscal(driver)
+            
+            if acessar_sucesso:
                 logger.info("Botão 'Acessar' clicado com sucesso!")
                 
                 # AVISO SOBRE CAPTCHA NESTE MOMENTO
@@ -2318,336 +2365,310 @@ def main():
                 # PASSO 5: AGUARDAR REDIRECIONAMENTO PARA A PÁGINA DE DESTINO
                 logger.info(f"Aguardando redirecionamento para: {PAGINA_DESTINO}")
                 logger.info("Este processo pode levar vários minutos. Por favor, aguarde...")
-                
-                # Aguarda até 5 minutos (300 segundos) pelo redirecionamento
+                  # Aguarda até 5 minutos (300 segundos) pelo redirecionamento
                 destino_alcancado = aguardar_pagina_destino(driver, PAGINA_DESTINO, tempo_maximo=300)
                 
-                if not destino_alcancado:
-                    logger.error("Não foi possível alcançar a página de destino. Impossível continuar.")
-                    return
-                
-                logger.info("PÁGINA DE DESTINO ALCANÇADA COM SUCESSO!")
-                
-                # Captura estado final
-                salvar_screenshot(driver, "pagina_destino.png")
-                salvar_html(driver, "pagina_destino")
-                
-                # PASSO 6: FECHAR AVISO NA PÁGINA DE DESTINO
-                logger.info("Tentando fechar o aviso na página de destino...")
-                fechar_aviso(driver)  # Continuamos mesmo se não conseguirmos fechar
-            
-            # Para todas as notas (incluindo a primeira), seguimos o fluxo:
-            # Se não for a primeira nota, voltamos para a página principal (se necessário)
-            if indice_nota > 0:
-                try:
-                    # Verificar se precisamos voltar à página principal
-                    if not "sistema/66" in driver.current_url:
-                        logger.info("Voltando para a página principal para processar a próxima nota...")
-                        driver.get(PAGINA_DESTINO)
-                        esperar_pagina_carregar(driver, timeout=30)
-                        salvar_screenshot(driver, f"pagina_principal_nota_{indice_nota+1}.png")
+                if destino_alcancado:
+                    logger.info("PÁGINA DE DESTINO ALCANÇADA COM SUCESSO!")
+                    # Captura estado final
+                    salvar_screenshot(driver, "pagina_destino.png")
+                    salvar_html(driver, "pagina_destino")
                     
-                    # Tenta fechar aviso, se houver
-                    fechar_aviso(driver)
-                except Exception as e:
-                    logger.error(f"Erro ao retornar à página principal: {e}")
-                    logger.warning("Tentando continuar mesmo assim...")
-            
-            # PASSO 7: CLICAR NO BOTÃO "EMITIR NOTA FISCAL"
-            logger.info("Tentando clicar no botão 'Emitir Nota Fiscal'...")
-            emitir_nota_sucesso = clicar_emitir_nota_fiscal(driver)
-            
-            if not emitir_nota_sucesso:
-                logger.error(f"Não foi possível clicar no botão 'Emitir Nota Fiscal'. Pulando nota {indice_nota+1}.")
-                continue
-            
-            logger.info("BOTÃO 'EMITIR NOTA FISCAL' CLICADO COM SUCESSO!")
-            logger.info("Aguardando carregamento da próxima página...")
-            time.sleep(3)  # Pausa para carregamento
-            
-            # PASSO 8: CLICAR NO BOTÃO "PRÓXIMO"
-            logger.info("Tentando clicar no botão 'Próximo'...")
-            proximo_sucesso = clicar_proximo(driver)
-            
-            if not proximo_sucesso:
-                logger.error(f"Não foi possível clicar no botão 'Próximo'. Pulando nota {indice_nota+1}.")
-                continue
-            
-            logger.info("BOTÃO 'PRÓXIMO' CLICADO COM SUCESSO!")
-            
-            # Verificar se o fluxo de emissão foi iniciado corretamente
-            time.sleep(3)  # Pequena pausa para carregamento
-            emissao_iniciada = verificar_emissao_iniciada(driver)
-            
-            if not emissao_iniciada:
-                logger.error(f"Não foi possível iniciar o fluxo de emissão. Pulando nota {indice_nota+1}.")
-                continue
-            
-            logger.info("FLUXO DE EMISSÃO DE NOTA FISCAL INICIADO COM SUCESSO!")
-            
-            # PASSO 9: SELECIONAR TIPO DO TOMADOR
-            logger.info("Selecionando 'Pessoa Jurídica' como tipo do tomador...")
-            selecao_sucesso = selecionar_tipo_tomador(driver, tipo="Pessoa Jurídica")
-            
-            if not selecao_sucesso:
-                logger.error(f"Não foi possível selecionar o tipo de tomador. Pulando nota {indice_nota+1}.")
-                continue
-            
-            logger.info("TIPO DO TOMADOR 'PESSOA JURÍDICA' SELECIONADO COM SUCESSO!")
-            salvar_screenshot(driver, "tipo_tomador_selecionado.png")
-            logger.info("Continuando com o preenchimento dos dados da nota fiscal...")
-            
-            # Buscar empresa por CNPJ usando o módulo busca_empresa
-            try:
-                # Importa o módulo de busca de empresa
-                import sys
-                import os
-                
-                # Garante que o diretório atual está no path
-                if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
-                    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-                
-                # Agora importa a função de busca de empresa
-                from busca_empresa import preencher_busca_cnpj
-                
-                # Obtém os dados necessários
-                cnpj = dados_nota.get('cnpj_tomador', '')
-                nome_empresa = dados_nota.get('razao_social', '')
-                
-                # Log dos dados (mascarando o CNPJ por segurança)
-                if len(cnpj) > 6:
-                    cnpj_mascarado = f"{cnpj[:4]}****{cnpj[-2:]}"
-                else:
-                    cnpj_mascarado = "****"
-                
-                logger.info(f"Buscando empresa: {nome_empresa}")
-                logger.info(f"CNPJ: {cnpj_mascarado}")
-                
-                # Salva screenshot antes da busca
-                salvar_screenshot(driver, "antes_busca_empresa.png")
-                
-                # Usa a função do módulo busca_empresa para localizar e selecionar a empresa
-                # Passa o logger para manter o registro de logs consistente
-                busca_resultado = preencher_busca_cnpj(driver, cnpj, nome_empresa, logger)
-                
-                if busca_resultado:
-                    logger.info("EMPRESA ENCONTRADA E SELECIONADA COM SUCESSO!")
-                    salvar_screenshot(driver, "apos_selecao_empresa.png")
-                else:
-                    logger.warning("Não foi possível encontrar ou selecionar a empresa pelo CNPJ automaticamente.")
-                    logger.warning("Tentando abordagem alternativa...")
+                    # PASSO 6: FECHAR AVISO NA PÁGINA DE DESTINO
+                    logger.info("Tentando fechar o aviso na página de destino...")
+                    aviso_fechado = fechar_aviso(driver)
                     
-                    # Pergunta ao usuário se deseja continuar manualmente
-                    continuar_manual = input("Empresa não encontrada automaticamente. Deseja selecionar manualmente? (s/n): ")
-                    if continuar_manual.lower() == 's':
-                        logger.info("Aguardando seleção manual da empresa pelo usuário...")
-                        input("Selecione a empresa manualmente e pressione ENTER para continuar...")
-                        logger.info("Continuando após seleção manual da empresa")
+                    if aviso_fechado:
+                        logger.info("AVISO FECHADO COM SUCESSO!")
+                        salvar_screenshot(driver, "apos_fechar_aviso.png")
                     else:
-                        logger.warning("Processo interrompido pelo usuário após falha na busca por empresa")
-                        return False
-            except ImportError as e:
-                logger.error(f"Erro ao importar módulo busca_empresa.py: {e}")
-                logger.error("Verifique se o arquivo busca_empresa.py está presente no diretório")
-                return False
-            except Exception as e:
-                logger.error(f"Erro durante a busca de empresa: {e}")
-                import traceback
-                logger.error(traceback.format_exc())
-                
-                # Pergunta ao usuário se deseja continuar manualmente
-                continuar_manual = input("Erro durante a busca de empresa. Deseja continuar manualmente? (s/n): ")
-                if continuar_manual.lower() == 's':
-                    logger.info("Continuando manualmente após erro...")
-                else:
-                    logger.warning("Processo interrompido pelo usuário após erro")
-                    return False
-            
-            # PASSO 10: PREENCHER DADOS DO TOMADOR
-            logger.info("Preenchendo dados do tomador com informações do Excel...")
-            logger.info(f"CNPJ Tomador: {dados_nota.get('cnpj_tomador', '')[:4]}****{dados_nota.get('cnpj_tomador', '')[-2:]}")
-            logger.info(f"Razão Social: {dados_nota.get('razao_social', '')}")
-            preenchimento_tomador = preencher_dados_tomador(driver, dados_nota)
-            
-            if not preenchimento_tomador:
-                logger.error(f"Falha ao preencher dados do tomador. Pulando nota {indice_nota+1}.")
-                continue
-            
-            logger.info("DADOS DO TOMADOR PREENCHIDOS COM SUCESSO!")
-              
-            # PASSO 11: PREENCHER DADOS DO SERVIÇO
-            logger.info("Preenchendo dados do serviço...")
-            try:
-                # Tenta importar o módulo especializado
-                from preencher_dados_servico import preencher_formulario_servico
-                
-                # Usa a função do módulo especializado passando o logger
-                preenchimento_servico = preencher_formulario_servico(driver, dados_nota, logger)
-            except ImportError:
-                logger.warning("Módulo preencher_dados_servico não encontrado, usando função interna")
-                preenchimento_servico = preencher_dados_servico(driver, dados_nota)
-            except Exception as e:
-                logger.error(f"Erro ao usar módulo especializado: {e}")
-                logger.warning("Tentando com a função interna...")
-                preenchimento_servico = preencher_dados_servico(driver, dados_nota)
-            
-            if not preenchimento_servico:
-                logger.error(f"Falha ao preencher dados do serviço. Pulando nota {indice_nota+1}.")
-                continue
-            
-            logger.info("DADOS DO SERVIÇO PREENCHIDOS COM SUCESSO!")
-            
-            # PASSO 12: AVANÇAR NO FLUXO
-            logger.info("Tentando avançar para a próxima etapa...")
-            avancar_sucesso = procurar_e_clicar_proximo(driver)
-            
-            if not avancar_sucesso:
-                logger.error(f"Não foi possível avançar para a próxima etapa. Pulando nota {indice_nota+1}.")
-                continue
-            
-            logger.info("AVANÇOU COM SUCESSO PARA A PRÓXIMA ETAPA!")
-            salvar_screenshot(driver, "formulario_preenchido_avancar.png")
-            
-            # PASSO 13: PREENCHER TRIBUTOS FEDERAIS
-            logger.info("Preenchendo tributos federais (IR, PIS, COFINS, CSLL)...")
-            try:
-                # Tenta importar o módulo especializado para tributos
-                from preencher_tributos import preencher_tributos
-                
-                # Verifica se há tributos definidos na nota
-                tem_tributos = any([
-                    dados_nota.get('irrf', dados_nota.get('valor_ir', 0)) != 0,
-                    dados_nota.get('pis', dados_nota.get('valor_pis', 0)) != 0,
-                    dados_nota.get('cofins', dados_nota.get('valor_cofins', 0)) != 0,
-                    dados_nota.get('csll', dados_nota.get('valor_csll', 0)) != 0
-                ])
-                
-                # Se tem tributos, preenche os campos
-                if tem_tributos:
-                    logger.info("Preenchendo campos de tributos federais...")
-                    # Usa a função do módulo especializado passando o logger
-                    preenchimento_tributos = preencher_tributos(driver, dados_nota, logger)
+                        logger.warning("Não foi possível fechar o aviso automaticamente. Pode ser necessário fechá-lo manualmente.")
                     
-                    if preenchimento_tributos:
-                        logger.info("TRIBUTOS FEDERAIS PREENCHIDOS COM SUCESSO!")
-                    else:
-                        logger.warning("Houve problemas ao preencher tributos federais")
-                        # Pergunta se deseja continuar mesmo assim
-                        continuar_tributos = input("Houve problemas ao preencher os tributos federais. Deseja continuar mesmo assim? (s/n): ")
-                        if continuar_tributos.lower() != 's':
-                            logger.warning("Processo interrompido pelo usuário após falha nos tributos federais")
-                            return
-                else:
-                    logger.info("Nota não possui tributos federais para preencher")
-            except ImportError:
-                logger.warning("Módulo preencher_tributos não encontrado, pulando essa etapa")
-            except Exception as e:
-                logger.error(f"Erro ao preencher tributos federais: {e}")
-                import traceback
-                logger.error(traceback.format_exc())
-                # Pergunta se deseja continuar mesmo assim
-                continuar_tributos = input("Erro ao preencher os tributos federais. Deseja continuar mesmo assim? (s/n): ")
-                if continuar_tributos.lower() != 's':
-                    logger.warning("Processo interrompido pelo usuário após erro")
-                    return
-            
-            salvar_screenshot(driver, "apos_preencher_tributos.png")
-            
-            # PASSO 14: FINALIZAR EMISSÃO                                                
-            logger.info("FORMULÁRIO PREENCHIDO - PRONTO PARA EMISSÃO")
-            logger.info("Verifique manualmente se todos os dados estão corretos")
-            
-            # Pergunta ao usuário se deseja continuar com a emissão
-            continuar = input("Todos os dados estão corretos? Pressione ENTER para emitir a nota ou 'n' para cancelar: ")
-            if continuar.lower() != 'n':
-                # PASSO 13: Finalizar emissão da nota fiscal
-                logger.info("Finalizando a emissão da nota fiscal...")
-                   # Tenta clicar no botão para emitir a nota
-                # Lista de seletores possíveis para o botão Emitir
-                seletores_emitir = [
-                    "button[name='emitir']", 
-                    "button.botao-primario", 
-                    "button.__estrutura_componente_base.botao.botao-primario", 
-                    "button[type='submit']"
-                ]
-                
-                # Tenta clicar usando a função procurar_e_clicar
-                emitir_sucesso = procurar_e_clicar(driver, seletores_emitir)
-                
-                if emitir_sucesso:
-                    logger.info("NOTA FISCAL EMITIDA COM SUCESSO!")
-                    salvar_screenshot(driver, "nota_emitida.png")
+                    logger.info("AUTENTICAÇÃO CONCLUÍDA COM SUCESSO!")
                     
-                    # Aguarda um tempo para ter certeza que a página de confirmação carregou
-                    logger.info("Aguardando carregamento da página de confirmação...")
-                    time.sleep(5)
+                    # PASSO 7: CLICAR NO BOTÃO "EMITIR NOTA FISCAL"
+                    logger.info("Tentando clicar no botão 'Emitir Nota Fiscal'...")
+                    emitir_nota_sucesso = clicar_emitir_nota_fiscal(driver)
                     
-                    # Extrai o número da nota fiscal
-                    logger.info("Tentando extrair o número da nota fiscal...")
-                    numero_nota = extrair_numero_nota_fiscal(driver)
-                    
-                    if numero_nota:
-                        logger.info(f"NÚMERO DA NOTA EXTRAÍDO COM SUCESSO: {numero_nota}")
+                    if emitir_nota_sucesso:
+                        logger.info("BOTÃO 'EMITIR NOTA FISCAL' CLICADO COM SUCESSO!")
+                        logger.info("Aguardando carregamento da próxima página...")
+                        time.sleep(3)  # Pausa para carregamento
                         
-                        # Atualiza o número da nota no Excel
-                        logger.info(f"Atualizando Excel com o número da nota: {numero_nota}")
-                        atualizacao_sucesso = atualizar_numero_nota_excel(
-                            EXCEL_PATH, linha_excel, numero_nota)
+                        # PASSO 8: CLICAR NO BOTÃO "PRÓXIMO"
+                        logger.info("Tentando clicar no botão 'Próximo'...")
+                        proximo_sucesso = clicar_proximo(driver)
                         
-                        if atualizacao_sucesso:
-                            logger.info("ARQUIVO EXCEL ATUALIZADO COM SUCESSO!")
-                        else:
-                            logger.error("FALHA AO ATUALIZAR O ARQUIVO EXCEL")
-                            logger.error(f"Por favor, atualize manualmente o número da nota {numero_nota} na linha {linha_excel} do Excel")
-                    else:
-                        logger.warning("Não foi possível extrair o número da nota automaticamente")
-                        numero_manual = input("Por favor, informe o número da nota fiscal emitida (deixe em branco para ignorar): ")
-                        if numero_manual.strip():
-                            logger.info(f"Atualizando Excel com o número informado manualmente: {numero_manual}")
-                            atualizacao_sucesso = atualizar_numero_nota_excel(
-                                EXCEL_PATH, linha_excel, numero_manual)
+                        if proximo_sucesso:
+                            logger.info("BOTÃO 'PRÓXIMO' CLICADO COM SUCESSO!")
+                              # Verificar se o fluxo de emissão foi iniciado corretamente
+                            time.sleep(3)  # Pequena pausa para carregamento
+                            emissao_iniciada = verificar_emissao_iniciada(driver)
                             
-                            if atualizacao_sucesso:
-                                logger.info("ARQUIVO EXCEL ATUALIZADO COM SUCESSO!")
-                            else:
-                                logger.error("FALHA AO ATUALIZAR O ARQUIVO EXCEL")
-                        else:
-                            logger.warning("Nenhum número informado. O Excel não será atualizado.")
-                else:
-                    logger.warning("Não foi possível clicar no botão para finalizar a emissão")
-                    logger.info("Prossiga manualmente para completar a emissão da nota fiscal")
+                            if emissao_iniciada:
+                                logger.info("FLUXO DE EMISSÃO DE NOTA FISCAL INICIADO COM SUCESSO!")                                # PASSO 9: SELECIONAR TIPO DO TOMADOR
+                                logger.info("Selecionando 'Pessoa Jurídica' como tipo do tomador...")
+                                selecao_sucesso = selecionar_tipo_tomador(driver, tipo="Pessoa Jurídica")
+                                if selecao_sucesso:
+                                    logger.info("TIPO DO TOMADOR 'PESSOA JURÍDICA' SELECIONADO COM SUCESSO!")
+                                    salvar_screenshot(driver, "tipo_tomador_selecionado.png")
+                                    logger.info("Continuando com o preenchimento dos dados da nota fiscal...")
+                                      # Buscar empresa por CNPJ usando o módulo busca_empresa
+                                    try:
+                                        # Importa o módulo de busca de empresa
+                                        import sys
+                                        import os
+                                        
+                                        # Garante que o diretório atual está no path
+                                        if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+                                            sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+                                        
+                                        # Agora importa a função de busca de empresa
+                                        from busca_empresa import preencher_busca_cnpj
+                                        
+                                        # Obtém os dados necessários
+                                        cnpj = dados_nota.get('cnpj_tomador', '')
+                                        nome_empresa = dados_nota.get('razao_social', '')
+                                        
+                                        # Log dos dados (mascarando o CNPJ por segurança)
+                                        if len(cnpj) > 6:
+                                            cnpj_mascarado = f"{cnpj[:4]}****{cnpj[-2:]}"
+                                        else:
+                                            cnpj_mascarado = "****"
+                                        
+                                        logger.info(f"Buscando empresa: {nome_empresa}")
+                                        logger.info(f"CNPJ: {cnpj_mascarado}")
+                                        
+                                        # Salva screenshot antes da busca
+                                        salvar_screenshot(driver, "antes_busca_empresa.png")
+                                        
+                                        # Usa a função do módulo busca_empresa para localizar e selecionar a empresa
+                                        # Passa o logger para manter o registro de logs consistente
+                                        busca_resultado = preencher_busca_cnpj(driver, cnpj, nome_empresa, logger)
+                                        
+                                        if busca_resultado:
+                                            logger.info("EMPRESA ENCONTRADA E SELECIONADA COM SUCESSO!")
+                                            salvar_screenshot(driver, "apos_selecao_empresa.png")
+                                        else:
+                                            logger.warning("Não foi possível encontrar ou selecionar a empresa pelo CNPJ automaticamente.")
+                                            logger.warning("Tentando abordagem alternativa...")
+                                            
+                                            # Pergunta ao usuário se deseja continuar manualmente
+                                            continuar_manual = input("Empresa não encontrada automaticamente. Deseja selecionar manualmente? (s/n): ")
+                                            if continuar_manual.lower() == 's':
+                                                logger.info("Aguardando seleção manual da empresa pelo usuário...")
+                                                input("Selecione a empresa manualmente e pressione ENTER para continuar...")
+                                                logger.info("Continuando após seleção manual da empresa")
+                                            else:
+                                                logger.warning("Processo interrompido pelo usuário após falha na busca por empresa")
+                                                return False
+                                    except ImportError as e:
+                                        logger.error(f"Erro ao importar módulo busca_empresa.py: {e}")
+                                        logger.error("Verifique se o arquivo busca_empresa.py está presente no diretório")
+                                        return False
+                                    except Exception as e:
+                                        logger.error(f"Erro durante a busca de empresa: {e}")
+                                        import traceback
+                                        logger.error(traceback.format_exc())
+                                        
+                                        # Pergunta ao usuário se deseja continuar manualmente
+                                        continuar_manual = input("Erro durante a busca de empresa. Deseja continuar manualmente? (s/n): ")
+                                        if continuar_manual.lower() == 's':
+                                            logger.info("Continuando manualmente após erro...")
+                                        else:
+                                            logger.warning("Processo interrompido pelo usuário após erro")
+                                            return False
+                                    
+                                    # PASSO 10: PREENCHER DADOS DO TOMADOR
+                                    logger.info("Preenchendo dados do tomador com informações do Excel...")
+                                    logger.info(f"CNPJ Tomador: {dados_nota.get('cnpj_tomador', '')[:4]}****{dados_nota.get('cnpj_tomador', '')[-2:]}")
+                                    logger.info(f"Razão Social: {dados_nota.get('razao_social', '')}")
+                                    preenchimento_tomador = preencher_dados_tomador(driver, dados_nota)
+                                    
+                                    if preenchimento_tomador:
+                                        logger.info("DADOS DO TOMADOR PREENCHIDOS COM SUCESSO!")
+                                          # PASSO 11: PREENCHER DADOS DO SERVIÇO
+                                        logger.info("Preenchendo dados do serviço...")
+                                        try:
+                                            # Tenta importar o módulo especializado
+                                            from preencher_dados_servico import preencher_formulario_servico
+                                            
+                                            # Usa a função do módulo especializado passando o logger
+                                            preenchimento_servico = preencher_formulario_servico(driver, dados_nota, logger)
+                                        except ImportError:
+                                            logger.warning("Módulo preencher_dados_servico não encontrado, usando função interna")
+                                            preenchimento_servico = preencher_dados_servico(driver, dados_nota)
+                                        except Exception as e:
+                                            logger.error(f"Erro ao usar módulo especializado: {e}")
+                                            logger.warning("Tentando com a função interna...")
+                                            preenchimento_servico = preencher_dados_servico(driver, dados_nota)
+                                        
+                                        if preenchimento_servico:
+                                            logger.info("DADOS DO SERVIÇO PREENCHIDOS COM SUCESSO!")
+                                            
+                                            # PASSO 12: AVANÇAR NO FLUXO
+                                            logger.info("Tentando avançar para a próxima etapa...")
+                                            avancar_sucesso = procurar_e_clicar_proximo(driver)
+                                            
+                                            if avancar_sucesso:
+                                                logger.info("AVANÇOU COM SUCESSO PARA A PRÓXIMA ETAPA!")
+                                                salvar_screenshot(driver, "formulario_preenchido_avancar.png")
+                                                
+                                                # PASSO 13: PREENCHER TRIBUTOS FEDERAIS
+                                                logger.info("Preenchendo tributos federais (IR, PIS, COFINS, CSLL)...")
+                                                try:
+                                                    # Tenta importar o módulo especializado para tributos
+                                                    from preencher_tributos import preencher_tributos
+                                                    
+                                                    # Verifica se há tributos definidos na nota
+                                                    tem_tributos = any([
+                                                        dados_nota.get('irrf', dados_nota.get('valor_ir', 0)) != 0,
+                                                        dados_nota.get('pis', dados_nota.get('valor_pis', 0)) != 0,
+                                                        dados_nota.get('cofins', dados_nota.get('valor_cofins', 0)) != 0,
+                                                        dados_nota.get('csll', dados_nota.get('valor_csll', 0)) != 0
+                                                    ])
+                                                    
+                                                    # Se tem tributos, preenche os campos
+                                                    if tem_tributos:
+                                                        logger.info("Preenchendo campos de tributos federais...")
+                                                        # Usa a função do módulo especializado passando o logger
+                                                        preenchimento_tributos = preencher_tributos(driver, dados_nota, logger)
+                                                        
+                                                        if preenchimento_tributos:
+                                                            logger.info("TRIBUTOS FEDERAIS PREENCHIDOS COM SUCESSO!")
+                                                        else:
+                                                            logger.warning("Houve problemas ao preencher tributos federais")
+                                                            # Pergunta se deseja continuar mesmo assim
+                                                            continuar_tributos = input("Houve problemas ao preencher os tributos federais. Deseja continuar mesmo assim? (s/n): ")
+                                                            if continuar_tributos.lower() != 's':
+                                                                logger.warning("Processo interrompido pelo usuário após falha nos tributos federais")
+                                                                return
+                                                    else:
+                                                        logger.info("Nota não possui tributos federais para preencher")
+                                                except ImportError:
+                                                    logger.warning("Módulo preencher_tributos não encontrado, pulando essa etapa")
+                                                except Exception as e:
+                                                    logger.error(f"Erro ao preencher tributos federais: {e}")
+                                                    import traceback
+                                                    logger.error(traceback.format_exc())
+                                                    # Pergunta se deseja continuar mesmo assim
+                                                    continuar_tributos = input("Erro ao preencher os tributos federais. Deseja continuar mesmo assim? (s/n): ")
+                                                    if continuar_tributos.lower() != 's':
+                                                        logger.warning("Processo interrompido pelo usuário após erro nos tributos federais")
+                                                        return
+                                                
+                                                salvar_screenshot(driver, "apos_preencher_tributos.png")
+                                                
+                                                # PASSO 14: FINALIZAR EMISSÃO                                                
+                                                logger.info("FORMULÁRIO PREENCHIDO - PRONTO PARA EMISSÃO")
+                                                logger.info("Verifique manualmente se todos os dados estão corretos")
+                                                
+                                                # Pergunta ao usuário se deseja continuar com a emissão
+                                                continuar = input("Todos os dados estão corretos? Pressione ENTER para emitir a nota ou 'n' para cancelar: ")
+                                                if continuar.lower() != 'n':
+                                                    # PASSO 13: Finalizar emissão da nota fiscal
+                                                    logger.info("Finalizando a emissão da nota fiscal...")
+                                                          # Tenta clicar no botão para emitir a nota
+                                                    # Lista de seletores possíveis para o botão Emitir
+                                                    seletores_emitir = [
+                                                        "button[name='emitir']", 
+                                                        "button.botao-primario", 
+                                                        "button.__estrutura_componente_base.botao.botao-primario", 
+                                                        "button[type='submit']"
+                                                    ]
+                                                    
+                                                    # Tenta clicar usando a função procurar_e_clicar
+                                                    emitir_sucesso = procurar_e_clicar(driver, seletores_emitir)
+                                                    
+                                                    if emitir_sucesso:
+                                                        logger.info("NOTA FISCAL EMITIDA COM SUCESSO!")
+                                                        salvar_screenshot(driver, "nota_emitida.png")
+                                                        
+                                                        # Aguarda um tempo para ter certeza que a página de confirmação carregou
+                                                        logger.info("Aguardando carregamento da página de confirmação...")
+                                                        time.sleep(5)
+                                                        
+                                                        # Extrai o número da nota fiscal
+                                                        logger.info("Tentando extrair o número da nota fiscal...")
+                                                        numero_nota = extrair_numero_nota_fiscal(driver)
+                                                        
+                                                        if numero_nota:
+                                                            logger.info(f"NÚMERO DA NOTA EXTRAÍDO COM SUCESSO: {numero_nota}")
+                                                            
+                                                            # Atualiza o número da nota no Excel
+                                                            logger.info(f"Atualizando Excel com o número da nota: {numero_nota}")
+                                                            atualizacao_sucesso = atualizar_numero_nota_excel(
+                                                                EXCEL_PATH, linha_excel, numero_nota)
+                                                            
+                                                            if atualizacao_sucesso:
+                                                                logger.info("ARQUIVO EXCEL ATUALIZADO COM SUCESSO!")
+                                                            else:
+                                                                logger.error("FALHA AO ATUALIZAR O ARQUIVO EXCEL")
+                                                                logger.error(f"Por favor, atualize manualmente o número da nota {numero_nota} na linha {linha_excel} do Excel")
+                                                        else:
+                                                            logger.warning("Não foi possível extrair o número da nota automaticamente")
+                                                            numero_manual = input("Por favor, informe o número da nota fiscal emitida (deixe em branco para ignorar): ")
+                                                            if numero_manual.strip():
+                                                                logger.info(f"Atualizando Excel com o número informado manualmente: {numero_manual}")
+                                                                atualizacao_sucesso = atualizar_numero_nota_excel(
+                                                                    EXCEL_PATH, linha_excel, numero_manual)
+                                                                
+                                                                if atualizacao_sucesso:
+                                                                    logger.info("ARQUIVO EXCEL ATUALIZADO COM SUCESSO!")
+                                                                else:
+                                                                    logger.error("FALHA AO ATUALIZAR O ARQUIVO EXCEL")
+                                                            else:
+                                                                logger.warning("Nenhum número informado. O Excel não será atualizado.")
+                                                    else:
+                                                        logger.warning("Não foi possível clicar no botão para finalizar a emissão")
+                                                        logger.info("Prossiga manualmente para completar a emissão da nota fiscal")
+                                                else:
+                                                    logger.info("Emissão de nota fiscal cancelada pelo usuário")
+                                                
+                                                logger.info("PROCESSO DE AUTOMAÇÃO CONCLUÍDO")
+                                            else:
+                                                logger.warning("Não foi possível avançar automaticamente")
+                                                logger.info("Formulário preenchido - continue manualmente")
+    except Exception as e:
+        logger.error(f"Erro durante a automação: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        
+        if 'driver' in locals():
+            salvar_screenshot(driver, "erro_execucao.png")
+            logger.info("Screenshot do erro salvo em logs/imagens/erro_execucao.png")
+            salvar_html(driver, "pagina_erro")
+        
+        logger.error("\nSUGESTÕES PARA RESOLVER O PROBLEMA:")
+        logger.error("1. Certifique-se de que o arquivo .env existe e contém as variáveis necessárias")
+        logger.error("2. Verifique se sua conexão com a internet está estável")
+        logger.error("3. Tente acessar o site manualmente para confirmar que está funcionando")
+        
+    finally:
+        # Para manter a janela aberta após a execução, pergunte ao usuário se deseja fechar
+        if 'driver' in locals():
+            fechar = input("Deseja fechar o navegador? (s/n): ")
+            if fechar.lower() == 's':
+                driver.quit()
+                logger.info("Navegador fechado.")
             else:
-                logger.info("Emissão de nota fiscal cancelada pelo usuário")
-            
-            logger.info("PROCESSO DE AUTOMAÇÃO CONCLUÍDO")
-        except Exception as e:
-            logger.error(f"Erro durante o processamento da nota {indice_nota+1}: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            
-            if 'driver' in locals():
-                salvar_screenshot(driver, f"erro_execucao_nota_{indice_nota+1}.png")
-                logger.info(f"Screenshot do erro salvo em logs/imagens/erro_execucao_nota_{indice_nota+1}.png")
-                salvar_html(driver, f"pagina_erro_nota_{indice_nota+1}")
-            
-            # Perguntar se deseja continuar com a próxima nota
-            if indice_nota < notas_para_processar - 1:  # Se não for a última nota
-                continuar = input(f"Ocorreu um erro no processamento da nota {indice_nota+1}. Deseja continuar com a próxima nota? (s/n): ")
-                if continuar.lower() != 's':
-                    logger.info("Interrompendo o processamento de notas por escolha do usuário.")
-                    break
-    
-    # Ao final do processamento de todas as notas
-    logger.info("\n" + "="*80)
-    logger.info(f"PROCESSAMENTO DE NOTAS CONCLUÍDO: {min(indice_nota + 1, notas_para_processar)} de {notas_para_processar} notas processadas")
-    logger.info("="*80 + "\n")
-    
-    # Para manter a janela aberta após a execução, pergunte ao usuário se deseja fechar
-    if 'driver' in locals():
-        fechar = input("Deseja fechar o navegador? (s/n): ")
-        if fechar.lower() == 's':
-            driver.quit()
-            logger.info("Navegador fechado.")
-        else:
-            logger.info("Navegador mantido aberto. Você pode fechá-lo manualmente quando terminar.")
-            logger.info("DICA: Aproveite para navegar manualmente e entender como o site funciona.")
+                logger.info("Navegador mantido aberto. Você pode fechá-lo manualmente quando terminar.")
+                logger.info("DICA: Aproveite para navegar manualmente e entender como o site funciona.")
+
+# O fluxo completo de automação implementado é:
+#
+# 1. Inicialização e configuração do navegador
+# 2. Acesso à página inicial do sistema NFSe
+# 3. Login no sistema com CPF/CNPJ e senha
+# 4. Clicar no botão "Acessar" para entrar na área fiscal
+# 5. Aguardar redirecionamento para a página de destino (pode levar vários minutos)
+# 6. Fechar o aviso na página de destino, se houver
+# 7. Clicar no botão "Emitir Nota Fiscal" para iniciar o processo de emissão
+# 8. Clicar no botão "Próximo" para avançar no fluxo de emissão
+# 9. Selecionar "Pessoa Jurídica" como tipo do tomador
+#
+# Cada etapa possui tratamento de erros e capturas de tela para facilitar a depuração.
+# Screenshots são salvos na pasta logs/imagens com nomes descritivos.
+
+if __name__ == "__main__":
+    main()
