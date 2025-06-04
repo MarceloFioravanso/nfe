@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<nfse>
+	<nf>
+		<numero_nfse>471</numero_nfse>
+		<serie_nfse>1</serie_nfse>
+		<data_nfse>03/06/2025</data_nfse>
+		<data_fato>03/06/2025</data_fato>
+		<hora_nfse>21:39:59</hora_nfse>
+		<situacao_codigo_nfse>1</situacao_codigo_nfse>
+		<situacao_descricao_nfse>Emitida</situacao_descricao_nfse>
+		<link_nfse>https://cachoeirinha.atende.net/autoatendimento/servicos/consulta-de-autenticidade-de-nota-fiscal-eletronica-nfse/detalhar/1/identificador/8561030625213959770025720422025067394413</link_nfse>
+		<cod_verificador_autenticidade>8561030625213959770025720422025067394413</cod_verificador_autenticidade>
+		<chave_acesso_nfse_nacional>43031031202572042000122000000000047125060000000007</chave_acesso_nfse_nacional>
+		<valor_total>3.380,00</valor_total>
+		<valor_desconto>0,00</valor_desconto>
+		<valor_ir>50,70</valor_ir>
+		<valor_inss>0,00</valor_inss>
+		<valor_contribuicao_social>33,80</valor_contribuicao_social>
+		<valor_rps>0,00</valor_rps>
+		<valor_pis>21,97</valor_pis>
+		<valor_cofins>101,40</valor_cofins>
+		<observacao>0</observacao>
+	</nf>
+	<prestador>
+		<cpfcnpj>02572042000122</cpfcnpj>
+		<cidade>8561</cidade>
+	</prestador>
+	<tomador>
+		<tipo>J</tipo>
+		<cpfcnpj>44699346000103</cpfcnpj>
+		<ie></ie>
+		<sobrenome_nome_fantasia>ARTECOLA QUIMICA S.A.</sobrenome_nome_fantasia>
+		<nome_razao_social>ARTECOLA QUIMICA S.A.</nome_razao_social>
+		<numero_residencia>5801</numero_residencia>
+		<complemento>0</complemento>
+		<ponto_referencia>0</ponto_referencia>
+		<pais>Brasil</pais>
+		<siglaPais>BR</siglaPais>
+		<codigoIbgePais>1058</codigoIbgePais>
+		<estado>RS</estado>
+		<cidade>8577</cidade>
+		<logradouro> RS 239</logradouro>
+		<bairro>ZONA INDUSTRIAL 2</bairro>
+		<cep>93700000</cep>
+		<ddd_fone_residencial>0</ddd_fone_residencial>
+		<ddd_fone_comercial>0</ddd_fone_comercial>
+		<fone_residencial>5137785200</fone_residencial>
+		<fone_comercial>0</fone_comercial>
+		<ddd_fax>0</ddd_fax>
+		<fone_fax>0</fone_fax>
+		<email>paulo.schmokel@artecola.com.br</email>
+	</tomador>
+	<itens>
+		<lista>
+			<codigo_local_prestacao_servico>8561</codigo_local_prestacao_servico>
+			<codigo_item_lista_servico>1701</codigo_item_lista_servico>
+			<descritivo>SPÉCIALITÉ - PESQUISA DE REMUNERAÇÃO
+
+VENCIMENTO: 14/06/2025
+
+PARCELA: 4/5
+
+DADOS PARA PIX OU DEPÓSITO:
+
+PIX: (51) 99775-6607
+BANCO: 748 - SICREDI
+AGÊNCIA: 0116
+CONTA: 17240-7
+TITULAR: LAFIORAVANSO CONSULTORIA EMPRESARIAL LTDA.
+CNPJ: 02.572.042/0001-22</descritivo>
+			<aliquota_item_lista_servico>2,5000</aliquota_item_lista_servico>
+			<situacao_tributaria>0</situacao_tributaria>
+			<valor_tributavel>3.380,00</valor_tributavel>
+			<valor_deducao>0,00</valor_deducao>
+			<valor_issrf>0,00</valor_issrf>
+			<tributa_municipio_prestador>S</tributa_municipio_prestador>
+		</lista>
+	</itens>
+</nfse>

@@ -1,4 +1,24 @@
-selenium==4.18.1
-python-dotenv==1.0.1
-webdriver-manager==4.0.1
-chromedriver-autoinstaller==0.6.3
+# Automação de NFSe - Requisitos 
+# Version: 1.3.0 - Atualizado em 03/06/2025
+
+# Dependências principais para a automação
+selenium==4.18.1                 # Automação de navegador
+python-dotenv==1.0.1             # Carregamento de variáveis de ambiente
+webdriver-manager==4.0.1         # Gerenciamento de webdrivers
+chromedriver-autoinstaller==0.6.3 # Instalação automática do ChromeDriver
+pandas>=1.5.0                    # Manipulação de dados tabulares
+openpyxl>=3.0.0                  # Manipulação de planilhas Excel
+
+# Dependências para manipulação de planilhas (adicionais)
+xlrd>=2.0.1
+
+# Dependências para logs e diagnósticos
+loguru>=0.5.3
+
+# Dependências para manipulação de emails
+# Para o módulo exchange_manager.py
+exchangelib>=4.7.0
+
+# Dependências opcionais
+pillow>=9.0.0  # Para processamento de imagens/captchas
+requests>=2.27.0  # Para requisições HTTP

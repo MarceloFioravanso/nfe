@@ -16,6 +16,8 @@ import random
 import logging
 from datetime import datetime
 import platform
+import pandas as pd
+from pathlib import Path
 
 # Configuração de log
 logging.basicConfig(
@@ -59,6 +61,9 @@ NFS_URL = os.getenv("NFS_URL", "https://nfse-cachoeirinha.atende.net/autoatendim
 CPF_CNPJ = os.getenv("CPF_CNPJ")
 SENHA = os.getenv("SENHA")
 PAGINA_DESTINO = "https://nfse-cachoeirinha.atende.net/?rot=1&aca=1#!/sistema/66"
+
+# Caminho do arquivo Excel com as informações das notas fiscais
+EXCEL_PATH = r"C:\Users\pesqu\OneDrive\LAF\Adm_Fioravanso\Planejamentos_Controles\Financeiro\_Controle NotaFiscal.xlsx"
 
 # Verifica se as variáveis estão definidas
 if not NFS_URL:
@@ -528,56 +533,1776 @@ def realizar_login(driver, cpf_cnpj, senha):
         logger.error(f"Erro durante o processo de login: {e}")
         return False
 
-def main():
-    logger.info("Iniciando automação do sistema NFSe")
+def clicar_emitir_nota_fiscal(driver):
+    """
+    Função para clicar no botão 'Emitir Nota Fiscal' após o login.
+    Tenta diferentes abordagens para encontrar e clicar no botão.
+    """
+    logger.info("Procurando o botão 'Emitir Nota Fiscal'...")
     
-    # Verifica o sistema operacional
-    sistema_operacional = platform.system()
-    logger.info(f"Sistema Operacional detectado: {sistema_operacional}")
+    # Lista de seletores para o botão 'Emitir Nota Fiscal' em ordem de especificidade
+    seletores_botao = [
+        # Seletores específicos
+        "a[onclick*='emitirNota']",
+        "button[name='emitirNota']",
+        "a[title='Emitir Nota Fiscal']",
+        "button[title='Emitir Nota Fiscal']",
+        "a.botao_cor_tema[onclick*='emitir']",
+        "a.botao-emitir-nota",
+        
+        # Mais genéricos
+        ".botao_cor_tema",
+        ".botao-principal",
+        "a.btn-primary",
+        ".botao-emitir"
+    ]
     
+    # Tenta cada seletor
+    for seletor in seletores_botao:
+        try:
+            elementos = driver.find_elements(By.CSS_SELECTOR, seletor)
+            
+            if elementos:
+                logger.info(f"Botão 'Emitir Nota Fiscal' encontrado com seletor: {seletor}")
+                
+                # Torna o elemento visível se estiver oculto
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elementos[0])
+                time.sleep(0.5)
+                
+                salvar_screenshot(driver, "antes_emitir_nota_fiscal.png")
+                
+                # Tenta métodos diferentes de clique
+                try:
+                    logger.info("Tentando clicar diretamente...")
+                    elementos[0].click()
+                    logger.info("Clique direto realizado com sucesso")
+                    
+                    time.sleep(2)  # Pequena pausa após o clique
+                    esperar_pagina_carregar(driver, timeout=20)
+                    
+                    salvar_screenshot(driver, "apos_emitir_nota_fiscal.png")
+                    return True
+                except Exception as e:
+                    logger.warning(f"Clique direto falhou: {e}")
+                    
+                    try:
+                        logger.info("Tentando clicar via JavaScript...")
+                        driver.execute_script("arguments[0].click();", elementos[0])
+                        logger.info("Clique via JavaScript realizado com sucesso")
+                        
+                        time.sleep(2)
+                        esperar_pagina_carregar(driver, timeout=20)
+                        
+                        salvar_screenshot(driver, "apos_emitir_nota_fiscal_js.png")
+                        return True
+                    except Exception as e2:
+                        logger.warning(f"Clique via JavaScript falhou: {e2}")
+                        
+                        # Último recurso - executa função onclick diretamente
+                        try:
+                            onclick = elementos[0].get_attribute("onclick")
+                            if onclick:
+                                logger.info(f"Tentando executar onclick: {onclick}")
+                                driver.execute_script(onclick)
+                                logger.info("Execução de função onclick bem-sucedida")
+                                
+                                time.sleep(2)
+                                esperar_pagina_carregar(driver, timeout=20)
+                                
+                                salvar_screenshot(driver, "apos_emitir_nota_fiscal_onclick.png")
+                                return True
+                        except Exception as e3:
+                            logger.warning(f"Execução de onclick falhou: {e3}")
+                
+                # Se chegou aqui, todas as tentativas de clique falharam para este elemento
+                logger.warning("Todas as tentativas de clique falharam para este seletor, tentando o próximo...")
+        
+        except Exception as e:
+            logger.warning(f"Erro ao procurar/interagir com seletor {seletor}: {e}")
+    
+    # Tenta encontrar por texto também
     try:
-        # PASSO 1: INICIANDO O NAVEGADOR
-        logger.info("Configurando navegador...")
+        xpaths = [
+            "//a[contains(text(), 'Emitir Nota')]",
+            "//a[contains(text(), 'Emitir') and contains(text(), 'Fiscal')]",
+            "//button[contains(text(), 'Emitir Nota')]",
+            "//span[contains(text(), 'Emitir Nota')]/..",
+            "//div[contains(text(), 'Emitir Nota')]/.."
+        ]
         
-        # Configurações do Chrome
-        chrome_opts = Options()
-        chrome_opts.add_argument("--start-maximized")
-        chrome_opts.add_argument("--disable-notifications")
+        for xpath in xpaths:
+            elementos_texto = driver.find_elements(By.XPATH, xpath)
+            if elementos_texto:
+                logger.info(f"Botão 'Emitir Nota Fiscal' encontrado por xpath: {xpath}")
+                
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elementos_texto[0])
+                time.sleep(0.5)
+                
+                elementos_texto[0].click()
+                logger.info("Botão 'Emitir Nota Fiscal' clicado com sucesso")
+                
+                time.sleep(2)
+                esperar_pagina_carregar(driver, timeout=20)
+                
+                salvar_screenshot(driver, "apos_emitir_nota_fiscal_xpath.png")
+                return True
+    except Exception as e:
+        logger.warning(f"Erro ao buscar botão por texto: {e}")
+    
+    # Se chegou aqui, nenhum seletor funcionou
+    logger.error("Não foi possível encontrar ou clicar no botão 'Emitir Nota Fiscal'")
+    salvar_screenshot(driver, "falha_emitir_nota_fiscal.png")
+    salvar_html(driver, "pagina_falha_emitir_nota")
+    return False
+
+def clicar_proximo(driver):
+    """
+    Função para clicar no botão 'Próximo' após selecionar emitir nota fiscal.
+    Tenta diferentes abordagens para encontrar e clicar no botão.
+    """
+    logger.info("Procurando o botão 'Próximo'...")
+    
+    # Lista de seletores para o botão 'Próximo'
+    seletores_botao = [
+        # Seletores específicos
+        "button[name='proximo']",
+        "button[id*='proximo']",
+        "button[title='Próximo']",
+        "a[title='Próximo']",
+        "a.botao_cor_tema[onclick*='proximo']",
+        "button.botao-proximo",
         
-        # Inicia o navegador
-        driver = webdriver.Chrome(options=chrome_opts)
-        logger.info("Navegador iniciado com sucesso!")
-        
-        # PASSO 2: NAVEGANDO PARA A PÁGINA INICIAL
-        logger.info(f"Acessando URL: {NFS_URL}")
-        driver.get(NFS_URL)
-        
-        # Aguarda carregamento da página
-        esperar_pagina_carregar(driver, timeout=30)
-        
-        # Captura estado inicial
-        salvar_screenshot(driver, "pagina_inicial.png")
-        logger.info(f"Screenshot inicial salvo em {os.path.abspath('logs/imagens/pagina_inicial.png')}")
-        
-        # Log informativo
-        logger.info(f"Título da página: {driver.title}")
-        logger.info(f"URL atual: {driver.current_url}")
-        
-        # Salvar HTML inicial
-        salvar_html(driver, "pagina_inicial")
-        
-        # PASSO 3: PROCESSO DE LOGIN
-        logger.info("Iniciando processo de login...")
-        login_sucesso = realizar_login(driver, CPF_CNPJ, SENHA)
-        
-        if login_sucesso:
-            logger.info("LOGIN REALIZADO COM SUCESSO!")
+        # Seletores mais genéricos
+        ".botao_cor_tema",
+        ".botao-principal",
+        ".botao-proximo",
+        "button.btn-primary",
+        "a.btn-primary"
+    ]
+    
+    # Tenta cada seletor
+    for seletor in seletores_botao:
+        try:
+            elementos = driver.find_elements(By.CSS_SELECTOR, seletor)
             
-            # PASSO 4: ACESSAR ÁREA FISCAL
-            logger.info("Tentando acessar área fiscal...")
-            acessar_sucesso = clicar_acessar_fiscal(driver)
+            if elementos:
+                logger.info(f"Botão 'Próximo' encontrado com seletor: {seletor}")
+                
+                # Torna o elemento visível se estiver oculto
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elementos[0])
+                time.sleep(0.5)
+                
+                salvar_screenshot(driver, "antes_proximo.png")
+                
+                # Tenta métodos diferentes de clique
+                try:
+                    logger.info("Tentando clicar diretamente...")
+                    elementos[0].click()
+                    logger.info("Clique direto realizado com sucesso")
+                    
+                    time.sleep(2)  # Pequena pausa após o clique
+                    esperar_pagina_carregar(driver, timeout=20)
+                    
+                    salvar_screenshot(driver, "apos_proximo.png")
+                    return True
+                except Exception as e:
+                    logger.warning(f"Clique direto falhou: {e}")
+                    
+                    try:
+                        logger.info("Tentando clicar via JavaScript...")
+                        driver.execute_script("arguments[0].click();", elementos[0])
+                        logger.info("Clique via JavaScript realizado com sucesso")
+                        
+                        time.sleep(2)
+                        esperar_pagina_carregar(driver, timeout=20)
+                        
+                        salvar_screenshot(driver, "apos_proximo_js.png")
+                        return True
+                    except Exception as e2:
+                        logger.warning(f"Clique via JavaScript falhou: {e2}")
+                        
+                        # Último recurso - executa função onclick diretamente
+                        try:
+                            onclick = elementos[0].get_attribute("onclick")
+                            if onclick:
+                                logger.info(f"Tentando executar onclick: {onclick}")
+                                driver.execute_script(onclick)
+                                logger.info("Execução de função onclick bem-sucedida")
+                                
+                                time.sleep(2)
+                                esperar_pagina_carregar(driver, timeout=20)
+                                
+                                salvar_screenshot(driver, "apos_proximo_onclick.png")
+                                return True
+                        except Exception as e3:
+                            logger.warning(f"Execução de onclick falhou: {e3}")
+                
+                # Se chegou aqui, todas as tentativas de clique falharam para este elemento
+                logger.warning("Todas as tentativas de clique falharam para este seletor, tentando o próximo...")
+        
+        except Exception as e:
+            logger.warning(f"Erro ao procurar/interagir com seletor {seletor}: {e}")
+    
+    # Tenta encontrar por texto também
+    try:
+        xpaths = [
+            "//button[contains(text(), 'Próximo')]",
+            "//a[contains(text(), 'Próximo')]",
+            "//span[contains(text(), 'Próximo')]/..",
+            "//div[contains(text(), 'Próximo')]/..",
+            "//button[contains(text(), 'Continuar')]",
+            "//button[contains(text(), 'Avançar')]"
+        ]
+        
+        for xpath in xpaths:
+            elementos_texto = driver.find_elements(By.XPATH, xpath)
+            if elementos_texto:
+                logger.info(f"Botão 'Próximo' encontrado por xpath: {xpath}")
+                
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elementos_texto[0])
+                time.sleep(0.5)
+                
+                elementos_texto[0].click()
+                logger.info("Botão 'Próximo' clicado com sucesso")
+                
+                time.sleep(2)
+                esperar_pagina_carregar(driver, timeout=20)
+                
+                salvar_screenshot(driver, "apos_proximo_xpath.png")
+                return True
+    except Exception as e:
+        logger.warning(f"Erro ao buscar botão 'Próximo' por texto: {e}")
+    
+    # Se chegou aqui, nenhum seletor funcionou
+    logger.error("Não foi possível encontrar ou clicar no botão 'Próximo'")
+    salvar_screenshot(driver, "falha_proximo.png")
+    salvar_html(driver, "pagina_falha_proximo")
+    return False
+
+def verificar_emissao_iniciada(driver):
+    """
+    Verifica se o fluxo de emissão de nota fiscal foi iniciado com sucesso.
+    Procura por elementos que confirmem que estamos na página de emissão.
+    
+    Returns:
+        bool: True se o fluxo foi iniciado com sucesso, False caso contrário
+    """
+    logger.info("Verificando se o fluxo de emissão foi iniciado com sucesso...")
+    
+    # Lista de seletores para elementos que podem confirmar que estamos na página de emissão
+    seletores_confirmacao = [
+        # Campos típicos do formulário de emissão
+        "input[name*='tomador']",
+        "select[name*='servico']",
+        "input[name*='valor']",
+        "textarea[name*='descricao']",
+        
+        # Títulos ou cabeçalhos que podem estar presentes
+        "h1, h2, h3, h4",
+        ".titulo-pagina",
+        ".cabecalho-emissao"
+    ]
+    
+    # Verifica cada seletor
+    for seletor in seletores_confirmacao:
+        try:
+            elementos = driver.find_elements(By.CSS_SELECTOR, seletor)
+            for elemento in elementos:
+                texto = elemento.text.lower() if elemento.text else ""
+                # Se for um campo de input, verifica o placeholder ou o name
+                if elemento.tag_name in ["input", "select", "textarea"]:
+                    atributos = [
+                        elemento.get_attribute("placeholder") or "",
+                        elemento.get_attribute("name") or "",
+                        elemento.get_attribute("id") or ""
+                    ]
+                    # Converte para minúsculas e junta
+                    texto_atributos = " ".join([a.lower() for a in atributos if a])
+                    
+                    # Palavras-chave que indicam que estamos na página de emissão
+                    keywords = ["tomador", "servico", "valor", "descricao", "emissao", "nota"]
+                    
+                    if any(keyword in texto_atributos for keyword in keywords):
+                        logger.info(f"Elemento de confirmação encontrado: {elemento.tag_name} com atributos: {texto_atributos}")
+                        return True
+                
+                # Se for um elemento de texto, verifica o texto
+                elif texto and len(texto) > 3:
+                    # Palavras-chave que podem indicar emissão
+                    if any(keyword in texto for keyword in ["emissão", "nota fiscal", "serviço", "dados do tomador"]):
+                        logger.info(f"Texto de confirmação encontrado: '{texto}'")
+                        return True
+        except Exception as e:
+            logger.warning(f"Erro ao verificar seletor {seletor}: {e}")
+    
+    # Se não encontrou elementos confirmatórios, verifica a URL
+    url_atual = driver.current_url.lower()
+    if any(termo in url_atual for termo in ["emissao", "emitir", "nota", "fiscal", "servico"]):
+        logger.info(f"URL indica que estamos na página de emissão: {url_atual}")
+        return True
+    
+    # Se não encontrou nada, salva mais dados para análise
+    logger.warning("Não foi possível confirmar que o fluxo de emissão foi iniciado")
+    salvar_screenshot(driver, "verificacao_emissao.png")
+    salvar_html(driver, "pagina_verificacao_emissao")
+    
+    return False
+
+def selecionar_tipo_tomador(driver, tipo="Pessoa Jurídica"):
+    """
+    Seleciona o tipo do tomador no formulário de emissão de nota fiscal.
+    
+    Args:
+        driver: WebDriver do Selenium
+        tipo: Tipo do tomador a selecionar (padrão: "Pessoa Jurídica")
+    
+    Returns:
+        bool: True se a seleção foi bem-sucedida, False caso contrário
+    """
+    logger.info(f"Selecionando tipo do tomador: {tipo}")
+    
+    # Mapeamento de valores baseados no nome
+    valores = {
+        "Pessoa Física": "1",
+        "Pessoa Jurídica": "2",
+        "Pessoa Estrangeira": "3"
+    }
+    
+    # Verifica se o tipo solicitado é válido
+    if tipo not in valores:
+        logger.error(f"Tipo de tomador inválido: {tipo}. Tipos válidos são: {', '.join(valores.keys())}")
+        return False
+    
+    # Lista de seletores possíveis para o campo de seleção
+    seletores = [
+        "select[name='tipoTomador']",
+        "select.campo-lista",
+        "select[aria-label='Tipo do Tomador']",
+        "select.estrutura_campo_lista"
+    ]
+    
+    # Tenta localizar o campo de seleção
+    select_element = None
+    for seletor in seletores:
+        try:
+            elementos = driver.find_elements(By.CSS_SELECTOR, seletor)
+            if elementos:
+                logger.info(f"Elemento select encontrado com seletor: {seletor}")
+                select_element = elementos[0]
+                break
+        except Exception as e:
+            logger.warning(f"Erro ao procurar elemento com seletor {seletor}: {e}")
+    
+    # Se não encontrou, tenta um método mais genérico
+    if not select_element:
+        try:
+            # Tenta encontrar qualquer elemento select na página
+            elementos = driver.find_elements(By.TAG_NAME, "select")
+            if elementos:
+                # Verifica os elementos select para encontrar o de tipo de tomador
+                for elem in elementos:
+                    try:
+                        opcoes = elem.find_elements(By.TAG_NAME, "option")
+                        textos_opcoes = [opcao.text for opcao in opcoes]
+                        
+                        # Verifica se este select contém as opções esperadas
+                        if "Pessoa Física" in textos_opcoes and "Pessoa Jurídica" in textos_opcoes:
+                            logger.info("Elemento select de tipo de tomador encontrado por análise de opções")
+                            select_element = elem
+                            break
+                    except:
+                        continue
+        except Exception as e:
+            logger.warning(f"Erro ao procurar elementos select genéricos: {e}")
+    
+    # Se ainda não encontrou, loga o erro e retorna False
+    if not select_element:
+        logger.error("Não foi possível encontrar o campo de seleção do tipo de tomador")
+        salvar_screenshot(driver, "erro_select_tipo_tomador.png")
+        salvar_html(driver, "pagina_erro_tipo_tomador")
+        return False
+    
+    # Tenta selecionar o valor desejado
+    try:
+        # Tenta tornar o elemento visível para interação
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", select_element)
+        time.sleep(0.5)
+        
+        salvar_screenshot(driver, "antes_selecionar_tipo_tomador.png")
+        
+        # Método 1: Usar a API do Selenium Select
+        from selenium.webdriver.support.ui import Select
+        select = Select(select_element)
+        
+        # Tenta selecionar pelo valor
+        try:
+            select.select_by_value(valores[tipo])
+            logger.info(f"Selecionado '{tipo}' pelo valor: {valores[tipo]}")
+        except:
+            # Se falhar, tenta selecionar pelo texto visível
+            try:
+                select.select_by_visible_text(tipo)
+                logger.info(f"Selecionado '{tipo}' pelo texto visível")
+            except:
+                # Último recurso: usar JavaScript
+                valor = valores[tipo]
+                driver.execute_script(f"arguments[0].value = '{valor}'; arguments[0].dispatchEvent(new Event('change'));", select_element)
+                logger.info(f"Selecionado '{tipo}' via JavaScript")
+        
+        time.sleep(1)  # Pequena pausa para processar a seleção
+        
+        # Verifica se a seleção foi aplicada
+        valor_atual = select_element.get_attribute("value")
+        logger.info(f"Valor do select após seleção: {valor_atual}")
+        
+        salvar_screenshot(driver, "apos_selecionar_tipo_tomador.png")
+        
+        # Verifica se a seleção foi bem-sucedida
+        if valor_atual == valores[tipo]:
+            logger.info(f"Tipo de tomador '{tipo}' selecionado com sucesso")
+            return True
+        else:
+            logger.warning(f"A seleção do tipo de tomador pode não ter sido aplicada. Valor esperado: {valores[tipo]}, Valor atual: {valor_atual}")
+            return False
+    
+    except Exception as e:
+        logger.error(f"Erro ao selecionar tipo de tomador: {e}")
+        salvar_screenshot(driver, "erro_selecionar_tipo_tomador.png")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
+
+def carregar_dados_excel(caminho_excel):
+    """
+    Carrega os dados do arquivo Excel e retorna um DataFrame.
+    
+    Args:
+        caminho_excel (str): Caminho para o arquivo Excel
+        
+    Returns:
+        pd.DataFrame: DataFrame com os dados do Excel ou None se houver erro
+    """
+    try:
+        logger.info(f"Carregando dados do arquivo Excel: {caminho_excel}")
+        
+        # Verifica se o arquivo existe
+        if not os.path.exists(caminho_excel):
+            logger.error(f"Arquivo Excel não encontrado: {caminho_excel}")
+            return None
+          # Carrega o arquivo Excel
+        # Assume que os dados estão na primeira planilha, com cabeçalho na linha 3 (índice 2)
+        df = pd.read_excel(caminho_excel, sheet_name=0, header=2)
+        
+        logger.info(f"Arquivo Excel carregado com sucesso. {len(df)} linhas encontradas.")
+        logger.info(f"Colunas disponíveis: {list(df.columns)}")
+        
+        return df
+        
+    except Exception as e:
+        logger.error(f"Erro ao carregar arquivo Excel: {e}")
+        return None
+
+def encontrar_notas_pendentes(df):
+    """
+    Encontra todas as notas pendentes a serem processadas (linhas sem número na primeira coluna mas com dados válidos).
+    
+    Args:
+        df (pd.DataFrame): DataFrame com os dados do Excel
+        
+    Returns:
+        list: Lista de dicionários com dados das notas pendentes a serem processadas ou lista vazia se não encontrar
+    """
+    try:
+        if df is None or df.empty:
+            logger.error("DataFrame está vazio ou é None")
+            return []
+        
+        logger.info("Procurando por notas pendentes a serem processadas...")
+        
+        # Assumindo que a primeira coluna contém os números das notas
+        primeira_coluna = df.columns[0]
+        logger.info(f"Analisando coluna: {primeira_coluna}")
+        
+        notas_pendentes = []
+        
+        # Encontra todas as linhas sem número mas que tenham dados válidos
+        for idx in range(len(df)):
+            linha = df.iloc[idx]
+            numero_nota = linha[primeira_coluna]
+            empresa = linha['Empresa - Razão Social']
+            cnpj = linha['CNPJ']
             
-            if acessar_sucesso:
+            # Verifica se o número da nota está vazio
+            numero_vazio = pd.isna(numero_nota) or numero_nota == "" or numero_nota is None
+            
+            # Verifica se a linha tem dados válidos (empresa ou CNPJ)
+            tem_dados = not (pd.isna(empresa) or pd.isna(cnpj))
+            
+            if numero_vazio and tem_dados:
+                logger.info(f"Encontrada nota pendente na posição {idx + 1} (linha {idx + 3} do Excel)")
+                
+                # Adiciona os dados desta linha como dicionário
+                dados_nota = linha.to_dict()
+                
+                notas_pendentes.append({
+                    'linha_excel': idx + 3,  # +3 porque pandas é 0-based, Excel começa na linha 1, e temos 2 linhas de header
+                    'dados': dados_nota
+                })
+        
+        # Log das notas encontradas
+        if notas_pendentes:
+            logger.info(f"Total de {len(notas_pendentes)} notas pendentes encontradas.")
+            
+            # Log com detalhes de cada nota (mascarando informações sensíveis)
+            for i, nota in enumerate(notas_pendentes):
+                logger.info(f"\nDados da nota pendente {i+1} (linha {nota['linha_excel']} do Excel):")
+                for coluna, valor in nota['dados'].items():
+                    if pd.notna(valor) and valor != "":
+                        # Mascarar CNPJ se necessário
+                        if 'CNPJ' in coluna and len(str(valor)) > 6:
+                            valor_log = f"{str(valor)[:4]}****{str(valor)[-2:]}"
+                        else:
+                            valor_log = valor
+                        logger.info(f"  {coluna}: {valor_log}")
+            
+            return notas_pendentes
+        else:
+            logger.warning("Não foi encontrada nenhuma linha sem número com dados válidos. Todas as notas podem já ter sido processadas.")
+            return []
+        
+    except Exception as e:
+        logger.error(f"Erro ao procurar notas pendentes: {e}")
+        return []
+
+
+def encontrar_proxima_nota(df):
+    """
+    Encontra a próxima nota a ser processada utilizando a função encontrar_notas_pendentes.
+    Mantida para compatibilidade com o código existente.
+    
+    Args:
+        df (pd.DataFrame): DataFrame com os dados do Excel
+        
+    Returns:
+        dict: Dados da próxima nota a ser processada ou None se não encontrar
+    """
+    try:
+        notas_pendentes = encontrar_notas_pendentes(df)
+        if notas_pendentes:
+            logger.info(f"Retornando a primeira nota das {len(notas_pendentes)} notas pendentes encontradas")
+            return notas_pendentes[0]
+        
+        logger.warning("Não foi encontrada nenhuma nota pendente para processamento.")
+        return None
+    
+    except Exception as e:
+        logger.error(f"Erro ao procurar próxima nota: {e}")
+        return None
+
+def mapear_dados_nota(dados_nota):
+    """
+    Mapeia os dados do Excel para as variáveis necessárias para emissão da nota fiscal.
+    
+    Args:
+        dados_nota (dict): Dados da linha do Excel
+        
+    Returns:
+        dict: Dados mapeados para emissão da nota fiscal
+    """
+    try:
+        logger.info("Mapeando dados da nota fiscal...")
+        # Mapeamento baseado nas colunas reais do Excel
+        # Ajuste os nomes das colunas conforme encontrado no arquivo
+        mapeamento = {
+            'cnpj_tomador': dados_nota.get('CNPJ', ''),
+            'razao_social': dados_nota.get('Empresa - Razão Social', ''),
+            'nome_fantasia': dados_nota.get('Empresa - Razão Social', ''),  # Usando o mesmo campo
+            'endereco': dados_nota.get('Endereço', ''),
+            'numero': dados_nota.get('Número', ''),  # Novo campo para número
+            'complemento': dados_nota.get('Complemento', ''),  # Campo para complemento
+            'bairro': dados_nota.get('BAIRRO', ''),
+            'cidade': dados_nota.get('Município', ''),
+            'uf': dados_nota.get('Estado', ''),
+            'cep': dados_nota.get('CEP', ''),
+            'email': '',  # Não há campo de email específico no Excel
+            'telefone': '',  # Não há campo de telefone específico no Excel
+            'descricao_servico': dados_nota.get('Descrição', ''),
+            'valor_servico': dados_nota.get('Total', 0),
+            'aliquota_iss': '',  # Não há campo específico de alíquota
+            'valor_iss': '',  # Não há campo específico de ISS
+            'data_competencia': '',  # Pode ser construída com Dia/Mês/Ano Emis
+            'codigo_servico': '',  # Não há código de serviço específico
+            'observacoes': dados_nota.get('Observações', ''),
+            'inscricao_estadual': dados_nota.get('Inscrição Estadual', ''),
+            'inscricao_municipal': dados_nota.get('Inscrição Municipal', ''),
+            'irrf': dados_nota.get('IRRF(1,5%) ou (4,8%)', 0),
+            'pis': dados_nota.get('PIS (0,65%)', 0),
+            'cofins': dados_nota.get('Cofins (3%)', 0),
+            'csll': dados_nota.get('Contr. Social - CSLL (1%)', 0),            'total_impostos': dados_nota.get('Total Impostos', 0),
+            'valor_liquido': dados_nota.get('Líquido', 0),
+            # Campos adicionais para a descrição do serviço
+            'vencimento_dia': dados_nota.get('Dia Venc.', ''),    # Coluna para dia do vencimento
+            'vencimento_mes': dados_nota.get('Mês Venc.', ''),    # Coluna para mês do vencimento
+            'vencimento_ano': dados_nota.get('Ano Venc.', ''),    # Coluna para ano do vencimento
+            'parcela': dados_nota.get('Parcela', '')              # Coluna para número da parcela
+        }
+          # Validações básicas
+        campos_obrigatorios = ['cnpj_tomador', 'razao_social', 'valor_servico', 'descricao_servico']
+        campos_faltando = []
+        
+        for campo in campos_obrigatorios:
+            valor = mapeamento.get(campo)
+            if not valor or (isinstance(valor, str) and valor.strip() == '') or pd.isna(valor):
+                campos_faltando.append(campo)
+        
+        if campos_faltando:
+            logger.warning(f"Campos obrigatórios faltando ou vazios: {', '.join(campos_faltando)}")
+        
+        # Log dos dados mapeados
+        logger.info("Dados mapeados:")
+        for campo, valor in mapeamento.items():
+            if valor and not pd.isna(valor) and str(valor).strip() != '':
+                # Mascarar dados sensíveis
+                if 'cnpj' in campo.lower():
+                    valor_log = f"{str(valor)[:4]}****{str(valor)[-2:]}" if len(str(valor)) > 6 else "****"
+                else:
+                    valor_log = valor
+                logger.info(f"  {campo}: {valor_log}")
+        
+        return mapeamento
+        
+    except Exception as e:
+        logger.error(f"Erro ao mapear dados da nota: {e}")
+        return None
+
+def atualizar_numero_nota_excel(caminho_excel, linha_excel, numero_nota):
+    """
+    Atualiza o número da nota fiscal no arquivo Excel após a emissão.
+    
+    Args:
+        caminho_excel (str): Caminho para o arquivo Excel
+        linha_excel (int): Número da linha no Excel (1-based, já considerando o cabeçalho)
+        numero_nota (str): Número da nota fiscal emitida
+        
+    Returns:
+        bool: True se a atualização foi bem-sucedida, False caso contrário
+    """
+    try:
+        logger.info(f"Atualizando Excel - Linha {linha_excel} com número da nota: {numero_nota}")
+        
+        # Faz backup do arquivo original antes de qualquer modificação
+        backup_path = caminho_excel.replace('.xlsx', f'_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx')
+        import shutil
+        shutil.copy2(caminho_excel, backup_path)
+        logger.info(f"Backup criado: {backup_path}")
+        
+        # Usa openpyxl para preservar toda a formatação e dados do Excel
+        try:
+            from openpyxl import load_workbook
+            
+            # Carrega o arquivo Excel
+            logger.info(f"Carregando arquivo Excel: {caminho_excel}")
+            book = load_workbook(caminho_excel)
+            sheet = book.active
+            
+            # Atualiza o valor na célula correta (linha Excel é 1-based)
+            # A primeira coluna é A(1)
+            cell = sheet.cell(row=linha_excel, column=1)
+            valor_anterior = cell.value
+            cell.value = numero_nota
+            
+            logger.info(f"Atualizando célula A{linha_excel}: Valor anterior: {valor_anterior} -> Novo valor: {numero_nota}")
+            
+            # Salva o arquivo atualizado
+            book.save(caminho_excel)
+            logger.info(f"Arquivo Excel atualizado com sucesso na linha {linha_excel}, coluna A")
+            
+            return True
+            
+        except ImportError:
+            # Se openpyxl não estiver instalado, usa pandas como fallback
+            logger.warning("Biblioteca openpyxl não encontrada. Usando pandas como alternativa.")
+            
+            # Carrega o arquivo Excel com pandas (pode perder alguma formatação)
+            df = pd.read_excel(caminho_excel, sheet_name=0, header=2)
+            
+            # Calcula o índice do DataFrame (0-based)
+            # Ajusta o índice considerando o header=2
+            indice_df = linha_excel - 3
+            
+            if indice_df < 0 or indice_df >= len(df):
+                logger.error(f"Linha {linha_excel} está fora do intervalo válido do DataFrame (índice {indice_df})")
+                return False
+            
+            # Registra o valor anterior antes de atualizar
+            primeira_coluna = df.columns[0]
+            valor_anterior = df.iloc[indice_df, 0]
+            
+            # Atualiza a primeira coluna
+            df.iloc[indice_df, 0] = numero_nota
+            logger.info(f"Atualizando valor na linha {linha_excel}: {valor_anterior} -> {numero_nota}")
+            
+            # Salva o arquivo atualizado, preservando o índice original
+            df.to_excel(caminho_excel, sheet_name='Sheet1', index=False, header=True)
+            logger.info(f"Arquivo Excel atualizado com pandas na linha {linha_excel}")
+            
+            return True
+        
+    except Exception as e:
+        logger.error(f"Erro ao atualizar arquivo Excel: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        
+        # Sugere ao usuário atualizar manualmente
+        logger.error(f"\nPor favor, atualize manualmente o arquivo Excel:")
+        logger.error(f"1. Abra o arquivo: {caminho_excel}")
+        logger.error(f"2. Vá até a linha {linha_excel}")
+        logger.error(f"3. Na primeira coluna, insira o número da nota: {numero_nota}")
+        
+        return False
+
+def buscar_empresa_por_cnpj(driver, cnpj, nome_empresa):
+    """
+    Busca empresa pelo CNPJ e seleciona nos resultados de pesquisa.
+    
+    Args:
+        driver: WebDriver do Selenium
+        cnpj: CNPJ da empresa para busca
+        nome_empresa: Nome da empresa para confirmar na seleção de resultados
+        
+    Returns:
+        bool: True se a busca e seleção foi bem-sucedida, False caso contrário
+    """
+    try:
+        logger.info(f"Buscando empresa com CNPJ: {cnpj[:4]}****{cnpj[-2:]} - {nome_empresa}")
+        wait = WebDriverWait(driver, 10)
+        
+        # Procura pelo campo de busca de CNPJ/Razão Social
+        campo_busca_seletores = [
+            'input[name="Tomador.nomeRazao"]',
+            'input[placeholder*="Pesquisar por nome ou CNPJ"]',
+            'input.campo-texto[aria-label*="campo"]',
+            'input.campo-texto',
+            'input[name*="Tomador"][name*="nomeRazao"]'
+        ]
+        
+        campo_busca = None
+        for seletor in campo_busca_seletores:
+            try:
+                elementos = driver.find_elements(By.CSS_SELECTOR, seletor)
+                if elementos:
+                    campo_busca = elementos[0]
+                    logger.info(f"Campo de busca de CNPJ encontrado com seletor: {seletor}")
+                    break
+            except Exception as e:
+                logger.warning(f"Erro ao procurar campo com seletor {seletor}: {e}")
+        
+        if not campo_busca:
+            logger.error("Campo de busca de CNPJ/Razão Social não encontrado")
+            salvar_screenshot(driver, "erro_campo_busca_cnpj_nao_encontrado.png")
+            return False
+        
+        # Clica no campo de busca
+        campo_busca.click()
+        time.sleep(0.5)
+        
+        # Limpa o campo e insere o CNPJ
+        campo_busca.clear()
+        simular_digitacao_humana(campo_busca, cnpj)
+        logger.info(f"CNPJ inserido no campo de busca")
+        salvar_screenshot(driver, "apos_inserir_cnpj.png")
+        
+        # Aguarda os resultados
+        time.sleep(2)
+        
+        # Busca os resultados da pesquisa
+        logger.info("Procurando resultados da busca de CNPJ...")
+        resultados_seletores = [
+            'table.tabela-resultado tr',
+            'div.resultado-pesquisa',
+            'td[name="nomeRazao"]',
+            'tr[onclick*="selecionar"]'
+        ]
+        
+        for seletor in resultados_seletores:
+            try:
+                elementos = driver.find_elements(By.CSS_SELECTOR, seletor)
+                if elementos:
+                    for elemento in elementos:
+                        texto_elemento = elemento.text.upper() if elemento.text else ""
+                        # Verificar se o texto do elemento contém o nome da empresa
+                        if nome_empresa.upper() in texto_elemento:
+                            logger.info(f"Empresa encontrada nos resultados: {texto_elemento}")
+                            salvar_screenshot(driver, "empresa_encontrada.png")
+                            
+                            # Clica no resultado
+                            try:
+                                elemento.click()
+                                logger.info("Empresa selecionada com sucesso")
+                                salvar_screenshot(driver, "apos_selecionar_empresa.png")
+                                time.sleep(1)
+                                return True
+                            except Exception as e:
+                                logger.error(f"Erro ao clicar no resultado: {e}")
+                                try:
+                                    # Tenta clicar via JavaScript
+                                    driver.execute_script("arguments[0].click();", elemento)
+                                    logger.info("Empresa selecionada via JavaScript")
+                                    return True
+                                except:
+                                    logger.error("Falha ao clicar na empresa usando JavaScript")
+                                    return False
+            except Exception as e:
+                logger.warning(f"Erro ao procurar resultados com seletor {seletor}: {e}")
+        
+        # Se não encontrou resultados específicos, busca por td com name="nomeRazao"
+        try:
+            logger.info("Tentando localizar célula com name='nomeRazao'...")
+            elementos = driver.find_elements(By.CSS_SELECTOR, 'td[name="nomeRazao"]')
+            for elemento in elementos:
+                texto_elemento = elemento.text.upper() if elemento.text else ""
+                if nome_empresa.upper() in texto_elemento:
+                    logger.info(f"Empresa encontrada em td[name='nomeRazao']: {texto_elemento}")
+                    elemento.click()
+                    logger.info("Empresa selecionada com sucesso")
+                    return True
+        except Exception as e:
+            logger.error(f"Erro ao buscar por td[name='nomeRazao']: {e}")
+        
+        logger.error(f"Empresa '{nome_empresa}' não encontrada nos resultados da busca")
+        salvar_screenshot(driver, "empresa_nao_encontrada.png")
+        return False
+    
+    except Exception as e:
+        logger.error(f"Erro ao buscar empresa por CNPJ: {e}")
+        salvar_screenshot(driver, "erro_busca_cnpj.png")
+        return False
+
+def preencher_dados_tomador(driver, dados_nota):
+    """
+    Preenche os dados do tomador no formulário com base nos dados do Excel.
+    
+    Args:
+        driver: WebDriver do Selenium
+        dados_nota (dict): Dados mapeados da nota fiscal
+        
+    Returns:
+        bool: True se o preenchimento foi bem-sucedido, False caso contrário
+    """
+    try:
+        logger.info("Iniciando preenchimento dos dados do tomador...")
+        wait = WebDriverWait(driver, 10)
+        
+        # Aguarda um pouco para a página carregar após selecionar tipo do tomador
+        time.sleep(2)
+        
+        # Verifica se o checkbox "Endereço Alternativo" está selecionado
+        logger.info("Verificando se o checkbox 'Endereço Alternativo' está marcado...")
+        endereco_alternativo_selecionado = False
+        
+        try:
+            # Seletores possíveis para o checkbox de endereço alternativo
+            seletores_checkbox = [
+                'input[name="usaEnderecoAlternativo"]',
+                'input[aria-label="Endereço Alternativo"]',
+                'input.__estrutura_componente_base.campo.estrutura_check_tipo_toggle[name="usaEnderecoAlternativo"]',
+                'input.estrutura_check_tipo_toggle[name="usaEnderecoAlternativo"]',
+                'input[type="checkbox"][name*="endereco"]',
+                'input[type="checkbox"][aria-label*="endereco"]',
+                'input[type="checkbox"][id*="endereco"]',
+                'input.__estrutura_componente_base.campo.estrutura_check_tipo_toggle'
+            ]
+            
+            for seletor in seletores_checkbox:
+                checkboxes = driver.find_elements(By.CSS_SELECTOR, seletor)
+                if checkboxes:
+                    checkbox = checkboxes[0]
+                    # Verifica usando múltiplos métodos
+                    is_selected_attr = checkbox.is_selected()
+                    is_checked_attr = checkbox.get_attribute("checked") == "true"
+                    has_checked_class = "checked" in (checkbox.get_attribute("class") or "")
+                    aria_checked = checkbox.get_attribute("aria-checked") == "true"
+                    
+                    # Combinação dos resultados (qualquer um positivo indica que está marcado)
+                    endereco_alternativo_selecionado = any([is_selected_attr, is_checked_attr, has_checked_class, aria_checked])
+                    
+                    logger.info(f"Checkbox 'Endereço Alternativo' encontrado com seletor: {seletor}")
+                    logger.info(f"Estado do checkbox - is_selected(): {is_selected_attr}")
+                    logger.info(f"Estado do checkbox - atributo checked: {is_checked_attr}")
+                    logger.info(f"Estado do checkbox - classe checked: {has_checked_class}")
+                    logger.info(f"Estado do checkbox - aria-checked: {aria_checked}")
+                    logger.info(f"Conclusão: Checkbox 'Endereço Alternativo' está {'MARCADO' if endereco_alternativo_selecionado else 'DESMARCADO'}")
+                    break
+            
+            # Se não encontrou por CSS, tenta por XPath
+            if not checkboxes:
+                xpath_seletores = [
+                    "//input[@name='usaEnderecoAlternativo']",
+                    "//input[@aria-label='Endereço Alternativo']",
+                    "//label[contains(text(), 'Endereço Alternativo')]/preceding-sibling::input",
+                    "//label[contains(text(), 'Endereço Alternativo')]/following-sibling::input",
+                    "//label[contains(., 'Endereço Alternativo')]//input",
+                    "//span[contains(text(), 'Endereço Alternativo')]/preceding-sibling::input",
+                    "//span[contains(text(), 'Endereço Alternativo')]/following-sibling::input",
+                    "//input[contains(@name, 'endereco') and @type='checkbox']"
+                ]
+                
+                for xpath in xpath_seletores:
+                    elementos = driver.find_elements(By.XPATH, xpath)
+                    if elementos:
+                        checkbox = elementos[0]
+                        # Verifica usando múltiplos métodos
+                        is_selected_attr = checkbox.is_selected()
+                        is_checked_attr = checkbox.get_attribute("checked") == "true"
+                        has_checked_class = "checked" in (checkbox.get_attribute("class") or "")
+                        aria_checked = checkbox.get_attribute("aria-checked") == "true"
+                        
+                        # Combinação dos resultados
+                        endereco_alternativo_selecionado = any([is_selected_attr, is_checked_attr, has_checked_class, aria_checked])
+                        
+                        logger.info(f"Checkbox 'Endereço Alternativo' encontrado com XPath: {xpath}")
+                        logger.info(f"Estado do checkbox - is_selected(): {is_selected_attr}")
+                        logger.info(f"Estado do checkbox - atributo checked: {is_checked_attr}")
+                        logger.info(f"Estado do checkbox - classe checked: {has_checked_class}")
+                        logger.info(f"Estado do checkbox - aria-checked: {aria_checked}")
+                        logger.info(f"Conclusão: Checkbox 'Endereço Alternativo' está {'MARCADO' if endereco_alternativo_selecionado else 'DESMARCADO'}")
+                        break
+            
+            # Último recurso: verificação visual (captura elementos visuais que parecem checkboxes marcados)
+            if not endereco_alternativo_selecionado:
+                logger.info("Tentando detecção visual de checkbox marcado...")
+                
+                # Procura por elementos que parecem visualmente checkboxes marcados
+                elementos_visuais = driver.find_elements(By.CSS_SELECTOR, 
+                    '.checked, .selected, [class*="checkbox"][class*="checked"], [class*="checkbox"][class*="selected"], '
+                    '[class*="check"][class*="active"], [class*="toggle"][class*="active"], [class*="toggle"][class*="on"]')
+                
+                for elem in elementos_visuais:
+                    try:
+                        # Procura por texto relacionado a "Endereço Alternativo" próximo ao elemento
+                        parent = elem.find_element(By.XPATH, './parent::*')
+                        texto_proximo = parent.text
+                        
+                        if 'endereço alternativo' in texto_proximo.lower():
+                            logger.info("Checkbox 'Endereço Alternativo' encontrado por detecção visual")
+                            endereco_alternativo_selecionado = True
+                            break
+                        
+                        # Verifica também elementos próximos
+                        elementos_proximos = driver.find_elements(By.XPATH, 
+                            f'//label[contains(translate(text(), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "endereço alternativo")]')
+                        
+                        if elementos_proximos:
+                            # Verifica se o elemento visual está próximo do texto
+                            for texto_elem in elementos_proximos:
+                                if elem.location['y'] - 50 < texto_elem.location['y'] < elem.location['y'] + 50:
+                                    logger.info("Checkbox 'Endereço Alternativo' encontrado por proximidade com texto")
+                                    endereco_alternativo_selecionado = True
+                                    break
+                    except Exception as e:
+                        logger.debug(f"Erro na detecção visual: {e}")
+            
+            # Salva screenshot do estado do checkbox
+            salvar_screenshot(driver, "verificacao_endereco_alternativo.png")
+            
+            if endereco_alternativo_selecionado:
+                logger.info("O checkbox 'Endereço Alternativo' está marcado. Não é necessário preencher os dados de endereço.")
+                
+                # Clica direto no botão próximo
+                logger.info("Tentando clicar no botão 'Próximo'...")
+                seletores_proximo = [
+                    'button[name="botao_proximo"]',
+                    'button.__estrutura_componente_base.botao.botao-com-variante.estrutura_botao.disabled_user_select.estrutura_botao_janela_proximo[name="botao_proximo"][myaccesskey="p"]',
+                    'button.botao-com-variante[name="botao_proximo"]',
+                    'button.__estrutura_componente_base.botao.botao-com-variante',
+                    'button[myaccesskey="p"]',
+                    'button.estrutura_botao_janela_proximo',
+                    # Seletores adicionais para o botão próximo
+                    'button.botao_proximo',
+                    'button.botao-com-variante[type="submit"]',
+                    'button:not([disabled])[name*="proximo"]',
+                    'button:not([disabled])[id*="proximo"]',
+                    'button:not([disabled])[title*="Próximo"]',
+                    'button:not([disabled])[aria-label*="Próximo"]'
+                ]
+                
+                for seletor in seletores_proximo:
+                    try:
+                        elementos = driver.find_elements(By.CSS_SELECTOR, seletor)
+                        elementos_visiveis = [e for e in elementos if e.is_displayed()]
+                        
+                        if elementos_visiveis:
+                            botao_proximo = elementos_visiveis[0]
+                            logger.info(f"Botão 'Próximo' encontrado com seletor: {seletor}")
+                            
+                            # Torna o botão visível
+                            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", botao_proximo)
+                            time.sleep(0.5)
+                            
+                            # Salva screenshot antes de clicar
+                            salvar_screenshot(driver, "antes_clicar_proximo_endereco_alternativo.png")
+                            
+                            # Tenta clicar no botão
+                            try:
+                                botao_proximo.click()
+                                logger.info("Botão 'Próximo' clicado com sucesso")
+                                time.sleep(2)
+                                salvar_screenshot(driver, "apos_clicar_proximo_endereco_alternativo.png")
+                                
+                                # Verifica se a página mudou após o clique
+                                try:
+                                    # Procura por elementos que indicam que a página foi alterada
+                                    nova_pagina = WebDriverWait(driver, 5).until(
+                                        EC.presence_of_element_located((By.CSS_SELECTOR, 
+                                            'input[name*="servico"], input[name*="descricao"], textarea[name*="descricao"], '
+                                            'input[name*="valor"], input[name*="Valores"]'
+                                        ))
+                                    )
+                                    logger.info("Navegação confirmada: Encontrados elementos da próxima página")
+                                except:
+                                    logger.warning("Não foi possível confirmar se a navegação ocorreu com sucesso")
+                                
+                                return True
+                            except Exception as e:
+                                logger.warning(f"Clique direto falhou, tentando via JavaScript: {e}")
+                                try:
+                                    driver.execute_script("arguments[0].click();", botao_proximo)
+                                    logger.info("Botão 'Próximo' clicado via JavaScript")
+                                    time.sleep(2)
+                                    salvar_screenshot(driver, "apos_clicar_proximo_endereco_alternativo_js.png")
+                                    
+                                    # Verifica se a página mudou após o clique via JavaScript
+                                    try:
+                                        # Procura por elementos que indicam que a página foi alterada
+                                        nova_pagina = WebDriverWait(driver, 5).until(
+                                            EC.presence_of_element_located((By.CSS_SELECTOR, 
+                                                'input[name*="servico"], input[name*="descricao"], textarea[name*="descricao"], '
+                                                'input[name*="valor"], input[name*="Valores"]'
+                                            ))
+                                        )
+                                        logger.info("Navegação confirmada: Encontrados elementos da próxima página")
+                                    except:
+                                        logger.warning("Não foi possível confirmar se a navegação ocorreu com sucesso")
+                                    
+                                    return True
+                                except Exception as e2:
+                                    logger.error(f"Clique via JavaScript também falhou: {e2}")
+                    except Exception as e:
+                        logger.warning(f"Erro ao procurar botão 'Próximo' com seletor {seletor}: {e}")
+                
+                # Se não encontrou por CSS, tenta por XPath
+                xpath_botoes = [
+                    "//button[contains(text(), 'Próximo')]",
+                    "//a[contains(text(), 'Próximo')]",
+                    "//span[contains(text(), 'Próximo')]/parent::button",
+                    "//div[contains(text(), 'Próximo')]/..",
+                    "//button[contains(text(), 'Continuar')]",
+                    "//button[contains(text(), 'Avançar')]"
+                ]
+                
+                for xpath in xpath_botoes:
+                    try:
+                        elementos = driver.find_elements(By.XPATH, xpath)
+                        elementos_visiveis = [e for e in elementos if e.is_displayed()]
+                        
+                        if elementos_visiveis:
+                            botao_proximo = elementos_visiveis[0]
+                            logger.info(f"Botão 'Próximo' encontrado com XPath: {xpath}")
+                            
+                            # Torna o botão visível
+                            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", botao_proximo)
+                            time.sleep(0.5)
+                            
+                            # Salva screenshot antes de clicar
+                            salvar_screenshot(driver, "antes_clicar_proximo_xpath_endereco_alternativo.png")
+                            
+                            try:
+                                botao_proximo.click()
+                                logger.info("Botão 'Próximo' clicado com sucesso via XPath")
+                                time.sleep(2)
+                                salvar_screenshot(driver, "apos_clicar_proximo_xpath_endereco_alternativo.png")
+                                return True
+                            except Exception as e:
+                                logger.warning(f"Clique direto por XPath falhou, tentando via JavaScript: {e}")
+                                try:
+                                    driver.execute_script("arguments[0].click();", botao_proximo)
+                                    logger.info("Botão 'Próximo' clicado via JavaScript (XPath)")
+                                    time.sleep(2)
+                                    salvar_screenshot(driver, "apos_clicar_proximo_xpath_js_endereco_alternativo.png")
+                                    return True
+                                except Exception as e2:
+                                    logger.error(f"Clique via JavaScript (XPath) também falhou: {e2}")
+                    except Exception as e:
+                        logger.warning(f"Erro ao procurar botão 'Próximo' com XPath {xpath}: {e}")
+                
+                logger.error("Não foi possível encontrar ou clicar no botão 'Próximo'")
+                salvar_screenshot(driver, "erro_botao_proximo_nao_encontrado_endereco_alternativo.png")
+                return False
+                
+        except Exception as e:
+            logger.warning(f"Erro ao verificar checkbox de endereço alternativo: {e}")
+            import traceback
+            logger.warning(traceback.format_exc())
+            # Em caso de erro, continua com o preenchimento normal do endereço
+        
+        # Após selecionar empresa, agora precisamos preencher os campos de endereço
+        logger.info("Preenchendo dados de endereço do tomador...")# Processa o endereço para separar logradouro e número
+        endereco_completo = dados_nota.get('endereco', '')
+        logradouro = endereco_completo
+        numero = dados_nota.get('numero', '')
+        complemento = dados_nota.get('complemento', '')
+        
+        # Importa re para usar expressões regulares
+        import re
+        
+        # Estratégia 1: Se tiver o campo número preenchido no Excel, usa diretamente
+        if numero:
+            logger.info(f"Utilizando número do campo específico: {numero}")
+            # Se o número estiver no endereço completo, remove do endereço para evitar duplicidade
+            if str(numero) in endereco_completo:
+                logradouro = re.sub(r',?\s*' + re.escape(str(numero)) + r'\s*,?', '', endereco_completo).strip()
+        
+        # Estratégia 2: Se não tiver número e o endereço contiver uma vírgula, tenta extrair
+        elif ',' in endereco_completo:
+            partes = endereco_completo.split(',')
+            logradouro = partes[0].strip()
+            # A segunda parte pode ser o número ou o complemento
+            if len(partes) > 1:
+                segunda_parte = partes[1].strip()
+                # Extrai números da segunda parte
+                numeros = re.findall(r'\b\d+\b', segunda_parte)
+                if numeros:
+                    numero = numeros[0]
+                    # O restante pode ser complemento
+                    resto = re.sub(r'\b' + re.escape(numero) + r'\b', '', segunda_parte).strip()
+                    if resto:
+                        complemento = (complemento + ' ' + resto).strip() if complemento else resto                else:
+                    # Se não houver números na segunda parte, considera tudo como complemento
+                    complemento = (complemento + ' ' + segunda_parte).strip() if complemento else segunda_parte
+        
+        # Estratégia 3: Tenta localizar o número no final do endereço (comum em endereços brasileiros)
+        elif not numero:
+            # Padrão típico: "Rua Nome da Rua 123"
+            match = re.search(r'(.*[^\d])\s+(\d+)\s*$', endereco_completo)
+            if match:
+                logradouro = match.group(1).strip()
+                numero = match.group(2)
+                
+        # Se ainda não encontrou o número e é obrigatório, define um valor padrão
+        if not numero:
+            numero = "S/N"
+            logger.warning(f"Número não encontrado no endereço, usando valor padrão: {numero}")
+            
+        # Limpa possíveis vírgulas sobrando no logradouro
+        logradouro = logradouro.rstrip(',').strip()
+        
+        logger.info(f"Endereço processado: Logradouro='{logradouro}', Número='{numero}', Complemento='{complemento}'")
+          # Lista de campos a serem preenchidos
+        campos_endereco = {
+            'cep': {
+                'seletores': ['input[name="InformacoesTomador.cep"]', 'input[aria-label="CEP"]', 'input[name*="cep"]'],
+                'valor': dados_nota.get('cep', ''),
+                'obrigatorio': True
+            },
+            'logradouro': {
+                'seletores': ['input[name="InformacoesTomador.logradouro"]', 'input[aria-label="Logradouro"]', 'input[name*="logradouro"]'],
+                'valor': logradouro,
+                'obrigatorio': True
+            },
+            'numero': {
+                'seletores': ['input[name="InformacoesTomador.numero"]', 'input[aria-label="Número"]', 'input[name*="numero"]'],
+                'valor': str(numero),
+                'obrigatorio': True
+            },
+            'complemento': {
+                'seletores': ['input[name="InformacoesTomador.complemento"]', 'input[aria-label="Complemento"]', 'input[name*="complemento"]'],
+                'valor': complemento,
+                'obrigatorio': False
+            },
+            'bairro': {
+                'seletores': ['input[name="InformacoesTomador.bairro"]', 'input[aria-label="Bairro"]', 'input[name*="bairro"]', 'input[class*="campo-texto"][aria-label="Bairro"]'],
+                'valor': dados_nota.get('bairro', ''),
+                'obrigatorio': False
+            }
+        }
+        
+        # Tenta preencher cada campo de endereço
+        campos_preenchidos = 0
+        campos_falharam = []
+        
+        for nome_campo, config in campos_endereco.items():
+            valor = config['valor']
+            
+            # Se não tiver um valor, e o campo não for obrigatório, pula
+            if not valor and not config['obrigatorio']:
+                logger.info(f"Campo {nome_campo} não é obrigatório e não tem valor. Pulando...")
+                continue
+            
+            # Tenta cada seletor para encontrar o campo
+            campo_encontrado = False
+            for seletor in config['seletores']:
+                try:
+                    elementos = driver.find_elements(By.CSS_SELECTOR, seletor)
+                    if elementos:
+                        elemento = elementos[0]
+                        logger.info(f"Campo {nome_campo} encontrado com seletor: {seletor}")
+                        
+                        # Torna o elemento visível
+                        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elemento)
+                        time.sleep(0.5)
+                        
+                        # Limpa e preenche o campo
+                        elemento.clear()
+                        simular_digitacao_humana(elemento, valor)
+                        logger.info(f"Campo {nome_campo} preenchido com: '{valor}'")
+                        
+                        campos_preenchidos += 1
+                        campo_encontrado = True
+                        break
+                except Exception as e:
+                    logger.warning(f"Erro ao procurar/preencher {nome_campo} com seletor {seletor}: {e}")
+            
+            if not campo_encontrado and config['obrigatorio']:
+                logger.error(f"Não foi possível encontrar campo obrigatório: {nome_campo}")
+                campos_falharam.append(nome_campo)
+        
+        # Se todos os campos obrigatórios foram preenchidos
+        if not campos_falharam:
+            logger.info(f"Dados de endereço preenchidos com sucesso: {campos_preenchidos} campo(s)")
+            salvar_screenshot(driver, "apos_preencher_endereco.png")
+            
+            # Clica no botão próximo
+            logger.info("Tentando clicar no botão 'Próximo'...")
+            botao_proximo = None
+              # Lista de seletores para o botão próximo
+            seletores_proximo = [
+                'button[name="botao_proximo"]',
+                'button.__estrutura_componente_base.botao.botao-com-variante.estrutura_botao.disabled_user_select.estrutura_botao_janela_proximo[name="botao_proximo"][myaccesskey="p"]',
+                'button.botao-com-variante[name="botao_proximo"]',
+                'button.__estrutura_componente_base.botao.botao-com-variante',
+                'button[myaccesskey="p"]',
+                'button.estrutura_botao_janela_proximo'
+            ]
+            
+            # Tenta encontrar e clicar no botão próximo
+            for seletor in seletores_proximo:
+                try:
+                    elementos = driver.find_elements(By.CSS_SELECTOR, seletor)
+                    if elementos:
+                        botao_proximo = elementos[0]
+                        logger.info(f"Botão 'Próximo' encontrado com seletor: {seletor}")
+                        
+                        # Torna o botão visível
+                        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", botao_proximo)
+                        time.sleep(0.5)
+                        
+                        # Tenta clicar no botão
+                        try:
+                            botao_proximo.click()
+                            logger.info("Botão 'Próximo' clicado com sucesso")
+                            time.sleep(2)
+                            salvar_screenshot(driver, "apos_clicar_proximo_endereco.png")
+                            return True
+                        except Exception as e:
+                            logger.warning(f"Clique direto falhou, tentando via JavaScript: {e}")
+                            try:
+                                driver.execute_script("arguments[0].click();", botao_proximo)
+                                logger.info("Botão 'Próximo' clicado via JavaScript")
+                                time.sleep(2)
+                                salvar_screenshot(driver, "apos_clicar_proximo_endereco_js.png")
+                                return True
+                            except Exception as e2:
+                                logger.error(f"Clique via JavaScript também falhou: {e2}")
+                except Exception as e:
+                    logger.warning(f"Erro ao procurar botão 'Próximo' com seletor {seletor}: {e}")
+            
+            # Se chegou aqui, não encontrou o botão próximo
+            logger.error("Não foi possível encontrar ou clicar no botão 'Próximo'")
+            salvar_screenshot(driver, "erro_botao_proximo_nao_encontrado.png")
+            return False
+        else:
+            logger.error(f"Falha ao preencher campos obrigatórios: {campos_falharam}")
+            salvar_screenshot(driver, "erro_preenchimento_campos_endereco.png")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Erro durante preenchimento dos dados de endereço do tomador: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        salvar_screenshot(driver, "erro_geral_preenchimento_endereco.png")
+        return False
+        logger.error(traceback.format_exc())
+        salvar_screenshot(driver, "erro_geral_preenchimento_endereco.png")
+        return False
+        
+        # Se não conseguiu buscar por CNPJ, continua com o preenchimento manual dos campos
+        # Dicionário com mapeamento de campos e estratégias de localização
+        campos_formulario = {
+            'cnpj_tomador': {
+                'seletores': ['input[name*="cnpj"]', 'input[id*="cnpj"]', 'input[placeholder*="CNPJ"]'],
+                'valor': dados_nota.get('cnpj_tomador', ''),
+                'obrigatorio': True
+            },
+            'razao_social': {
+                'seletores': ['input[name*="razao"]', 'input[id*="razao"]', 'input[name*="social"]'],
+                'valor': dados_nota.get('razao_social', ''),
+                'obrigatorio': True
+            },
+            'nome_fantasia': {
+                'seletores': ['input[name*="fantasia"]', 'input[id*="fantasia"]'],
+                'valor': dados_nota.get('nome_fantasia', ''),
+                'obrigatorio': False
+            },
+            'endereco': {
+                'seletores': ['input[name*="endereco"]', 'input[id*="endereco"]', 'input[name*="logradouro"]'],
+                'valor': dados_nota.get('endereco', ''),
+                'obrigatorio': False
+            },
+            'numero': {
+                'seletores': ['input[name*="numero"]', 'input[id*="numero"]'],
+                'valor': str(dados_nota.get('numero', '')),
+                'obrigatorio': False
+            },
+            'bairro': {
+                'seletores': ['input[name*="bairro"]', 'input[id*="bairro"]'],
+                'valor': dados_nota.get('bairro', ''),
+                'obrigatorio': False
+            },
+            'cidade': {
+                'seletores': ['input[name*="cidade"]', 'input[id*="cidade"]', 'input[name*="municipio"]'],
+                'valor': dados_nota.get('cidade', ''),
+                'obrigatorio': False
+            },
+            'uf': {
+                'seletores': ['select[name*="uf"]', 'select[id*="uf"]', 'input[name*="uf"]'],
+                'valor': dados_nota.get('uf', ''),
+                'obrigatorio': False
+            },
+            'cep': {
+                'seletores': ['input[name*="cep"]', 'input[id*="cep"]'],
+                'valor': dados_nota.get('cep', ''),
+                'obrigatorio': False
+            },
+            'email': {
+                'seletores': ['input[name*="email"]', 'input[id*="email"]'],
+                'valor': dados_nota.get('email', ''),
+                'obrigatorio': False
+            },
+            'telefone': {
+                'seletores': ['input[name*="telefone"]', 'input[id*="telefone"]', 'input[name*="fone"]'],
+                'valor': dados_nota.get('telefone', ''),
+                'obrigatorio': False
+            }
+        }
+        
+        campos_preenchidos = 0
+        campos_falharam = []
+        
+        # Tenta preencher cada campo
+        for nome_campo, config in campos_formulario.items():
+            valor = config['valor']
+            
+            # Pula campos vazios ou NaN
+            if not valor or pd.isna(valor) or str(valor).strip() == '':
+                if config['obrigatorio']:
+                    logger.warning(f"Campo obrigatório '{nome_campo}' está vazio")
+                continue
+            
+            campo_preenchido = False
+            
+            # Tenta cada seletor até encontrar um que funcione
+            for seletor in config['seletores']:
+                try:
+                    elemento = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, seletor)))
+                    
+                    # Verifica se o elemento está visível e habilitado
+                    if elemento.is_displayed() and elemento.is_enabled():
+                        # Para selects, tenta selecionar por texto ou valor
+                        if elemento.tag_name == 'select':
+                            from selenium.webdriver.support.ui import Select
+                            select = Select(elemento)
+                            
+                            # Tenta selecionar por texto primeiro, depois por valor
+                            try:
+                                select.select_by_visible_text(str(valor))
+                                logger.info(f"Campo '{nome_campo}' selecionado: {valor}")
+                            except:
+                                try:
+                                    select.select_by_value(str(valor))
+                                    logger.info(f"Campo '{nome_campo}' selecionado por valor: {valor}")
+                                except:
+                                    logger.warning(f"Não foi possível selecionar '{valor}' no campo '{nome_campo}'")
+                                    continue
+                        else:
+                            # Para inputs e textareas
+                            simular_digitacao_humana(elemento, str(valor))
+                            logger.info(f"Campo '{nome_campo}' preenchido: {valor}")
+                        
+                        campos_preenchidos += 1
+                        campo_preenchido = True
+                        break
+                        
+                except (TimeoutException, NoSuchElementException):
+                    continue
+                except Exception as e:
+                    logger.warning(f"Erro ao preencher campo '{nome_campo}' com seletor '{seletor}': {e}")
+                    continue
+            
+            if not campo_preenchido and config['obrigatorio']:
+                campos_falharam.append(nome_campo)
+        
+        logger.info(f"Preenchimento concluído: {campos_preenchidos} campos preenchidos")
+        
+        if campos_falharam:
+            logger.error(f"Campos obrigatórios que falharam: {', '.join(campos_falharam)}")
+            salvar_screenshot(driver, "erro_preenchimento_campos_servico.png")
+            return False
+        
+        salvar_screenshot(driver, "dados_servico_preenchidos.png")
+        return True
+
+def procurar_e_clicar(driver, seletores):
+    """
+    Procura elementos na página com base em uma lista de seletores (CSS ou XPath) e tenta clicar.
+    
+    Args:
+        driver: WebDriver do Selenium
+        seletores: Lista de seletores CSS ou XPath para encontrar elementos
+        
+    Returns:
+        bool: True se conseguiu clicar em algum elemento, False caso contrário
+    """
+    logger.info(f"Tentando encontrar elementos usando {len(seletores)} seletores diferentes...")
+    
+    for seletor in seletores:
+        try:
+            # Determina se o seletor é XPath (começa com /) ou CSS
+            by_method = By.XPATH if seletor.startswith('/') else By.CSS_SELECTOR
+            
+            # Busca por elementos com este seletor
+            elementos = driver.find_elements(by_method, seletor)
+            logger.info(f"Seletor '{seletor}': encontrados {len(elementos)} elementos")
+            
+            if elementos:
+                # Filtra apenas elementos visíveis
+                elementos_visiveis = [e for e in elementos if e.is_displayed()]
+                if elementos_visiveis:
+                    # Tenta clicar no primeiro elemento visível
+                    try:
+                        logger.info("Tentando clicar no elemento...")
+                        elementos_visiveis[0].click()
+                        logger.info("Clique realizado com sucesso")
+                        return True
+                    except Exception as e:
+                        logger.warning(f"Clique direto falhou: {e}")
+                        
+                        # Tenta clicar via JavaScript
+                        try:
+                            logger.info("Tentando clicar via JavaScript...")
+                            driver.execute_script("arguments[0].click();", elementos_visiveis[0])
+                            logger.info("Clique via JavaScript realizado com sucesso")
+                            return True
+                        except Exception as e2:
+                            logger.warning(f"Clique via JavaScript falhou: {e2}")
+                
+                # Se não há elementos visíveis mas há elementos invisíveis, tenta clicar no primeiro
+                if not elementos_visiveis and elementos:
+                    try:
+                        logger.info("Tentando clicar em elemento não visível via JavaScript...")
+                        driver.execute_script("arguments[0].click();", elementos[0])
+                        logger.info("Clique em elemento não visível realizado com sucesso")
+                        return True
+                    except Exception as e:
+                        logger.warning(f"Clique em elemento não visível falhou: {e}")
+        
+        except Exception as e:
+            logger.warning(f"Erro ao tentar usar seletor {seletor}: {e}")
+    
+    logger.error("Não foi possível encontrar ou clicar em nenhum elemento")
+    return False
+
+def procurar_e_clicar_proximo(driver):
+    """
+    Procura e clica no botão 'Próximo' para avançar no fluxo.
+    
+    Args:
+        driver: WebDriver do Selenium
+        
+    Returns:
+        bool: True se conseguiu clicar, False caso contrário
+    """
+    try:
+        logger.info("Procurando botão 'Próximo' para avançar...")
+        wait = WebDriverWait(driver, 10)
+        
+        # Lista de seletores possíveis para o botão próximo
+        seletores_proximo = [
+            "//button[contains(text(), 'Próximo')]",
+            "//button[contains(text(), 'PRÓXIMO')]",
+            "//input[@value='Próximo']",
+            "//input[@value='PRÓXIMO']",
+            "//a[contains(text(), 'Próximo')]",
+            "//button[contains(@class, 'proximo')]",
+            "//button[@id*='proximo']",
+            "//button[@name*='proximo']",
+            "//input[contains(@class, 'proximo')]"
+        ]
+        
+        for seletor in seletores_proximo:
+            try:
+                elemento = wait.until(EC.element_to_be_clickable((By.XPATH, seletor)))
+                
+                # Scroll até o elemento se necessário
+                driver.execute_script("arguments[0].scrollIntoView(true);", elemento)
+                time.sleep(1)
+                
+                # Tenta clicar
+                elemento.click()
+                logger.info("Botão 'Próximo' clicado com sucesso")
+                time.sleep(2)  # Aguarda o processamento
+                return True
+                
+            except (TimeoutException, NoSuchElementException):
+                continue
+            except ElementNotInteractableException:
+                # Tenta com JavaScript se o clique normal falhar
+                try:
+                    driver.execute_script("arguments[0].click();", elemento)
+                    logger.info("Botão 'Próximo' clicado via JavaScript")
+                    time.sleep(2)
+                    return True
+                except:
+                    continue
+            except Exception as e:
+                logger.warning(f"Erro ao tentar clicar em 'Próximo' com seletor {seletor}: {e}")
+                continue
+        
+        logger.warning("Não foi encontrado nenhum botão 'Próximo' clicável")
+        salvar_screenshot(driver, "botao_proximo_nao_encontrado.png")
+        return False
+        
+    except Exception as e:
+        logger.error(f"Erro ao procurar botão 'Próximo': {e}")
+        return False
+
+def obter_caminho_absoluto(caminho_relativo):
+    """
+    Obtém o caminho absoluto a partir de um caminho relativo.
+    
+    Args:
+        caminho_relativo (str): Caminho relativo para converter
+        
+    Returns:
+        str: Caminho absoluto formatado
+    """
+    import os
+    try:
+        return os.path.abspath(caminho_relativo)
+    except Exception as e:
+        logger.error(f"Erro ao obter caminho absoluto para '{caminho_relativo}': {e}")
+        return caminho_relativo  # Retorna o próprio caminho relativo em caso de erro
+
+def extrair_numero_nota_fiscal(driver):
+    """
+    Extrai o número da nota fiscal após a emissão bem-sucedida.
+    
+    Args:
+        driver: WebDriver do Selenium
+        
+    Returns:
+        str: Número da nota fiscal ou None se não for encontrado
+    """
+    try:
+        logger.info("Tentando extrair o número da nota fiscal emitida...")
+        
+        # Lista de possíveis padrões para localizar o número da nota
+        seletores = [
+            ".numero-nota", 
+            ".numero_nota", 
+ ".nota-fiscal-numero", 
+            "#numeroNota",
+            "span[class*='numero']",
+            "div[class*='nota'] span",
+            "strong"
+        ]
+        
+        # Padrões de texto que podem preceder o número da nota
+        padroes_texto = [
+            "Nota Fiscal Nº:",
+            "NFSe Nº:",
+            "NFS-e:",
+            "Nº da Nota:",
+            "Número da Nota:",
+            "Nota:",
+            "Nº:"
+        ]
+        
+        # Tenta encontrar por seletores CSS
+        for seletor in seletores:
+            elementos = driver.find_elements(By.CSS_SELECTOR, seletor)
+            for elem in elementos:
+                texto = elem.text.strip()
+                if texto and re.search(r'\d+', texto):  # Verifica se contém números
+                    logger.info(f"Possível número de nota encontrado: {texto}")
+                    # Tenta extrair apenas os números
+                    numeros = re.search(r'(\d+)', texto)
+                    if numeros:
+                        numero_nota = numeros.group(1)
+                        logger.info(f"Número da nota extraído: {numero_nota}")
+                        return numero_nota
+        
+        # Tenta encontrar por padrões de texto
+        for padrao in padroes_texto:
+            xpath = f"//*[contains(text(), '{padrao}')]"
+            elementos = driver.find_elements(By.XPATH, xpath)
+            for elem in elementos:
+                texto_completo = elem.text
+                if padrao in texto_completo:
+                    # Tenta extrair o número após o padrão
+                    parte_apos_padrao = texto_completo.split(padrao, 1)[1].strip()
+                    numeros = re.search(r'(\d+)', parte_apos_padrao)
+                    if numeros:
+                        numero_nota = numeros.group(1)
+                        logger.info(f"Número da nota extraído após '{padrao}': {numero_nota}")
+                        return numero_nota
+        
+        # Se não encontrou pelos métodos anteriores, busca qualquer número que possa ser um número de nota
+        # em elementos com textos específicos relacionados a conclusão/emissão
+        elementos_conclusao = driver.find_elements(By.XPATH, "//*[contains(text(), 'concluída') or contains(text(), 'emitida') or contains(text(), 'sucesso') or contains(text(), 'Número')]")
+        for elem in elementos_conclusao:
+            texto = elem.text.strip()
+            numeros = re.findall(r'\d+', texto)
+            if numeros:
+                for num in numeros:
+                    if len(num) >= 5:  # Assume que o número da nota tem pelo menos 5 dígitos
+                        logger.info(f"Possível número de nota encontrado em texto de conclusão: {num}")
+                        return num
+        
+        logger.warning("Não foi possível extrair o número da nota fiscal automaticamente")
+        return None
+        
+    except Exception as e:
+        logger.error(f"Erro ao extrair número da nota fiscal: {e}")
+        return None
+
+def main():
+    # Importa módulos necessários no escopo local da função
+    import os
+    import platform
+    import sys
+    import traceback
+    
+    # PASSO 1: CARREGAMENTO DOS DADOS DO EXCEL
+    logger.info("="*80)
+    logger.info("INICIANDO AUTOMAÇÃO DE EMISSÃO DE NOTA FISCAL")
+    logger.info("="*80)
+    
+    # Carrega os dados do Excel
+    df_excel = carregar_dados_excel(EXCEL_PATH)
+    if df_excel is None:
+        logger.error("Falha ao carregar dados do Excel. Encerrando automação.")
+        return
+    
+    # Encontra todas as notas pendentes
+    notas_pendentes = encontrar_notas_pendentes(df_excel)
+    if not notas_pendentes:
+        logger.info("Nenhuma nota pendente encontrada. Todas as notas podem já ter sido processadas.")
+        return
+    
+    logger.info(f"Foram encontradas {len(notas_pendentes)} notas pendentes para processamento.")
+    
+    # Pergunta ao usuário quantas notas deseja processar
+    total_notas = len(notas_pendentes)
+    resposta = input(f"\nForam encontradas {total_notas} notas pendentes. Quantas notas você deseja processar? (Digite um número ou 'todas'): ")
+    
+    if resposta.lower() == 'todas':
+        notas_para_processar = total_notas
+    else:
+        try:
+            notas_para_processar = int(resposta)
+            if notas_para_processar < 1:
+                logger.warning("Número inválido. Processando apenas 1 nota.")
+                notas_para_processar = 1
+            elif notas_para_processar > total_notas:
+                logger.warning(f"Número excede o total de notas pendentes. Processando todas as {total_notas} notas.")
+                notas_para_processar = total_notas
+        except ValueError:
+            logger.warning("Entrada inválida. Processando apenas 1 nota.")
+            notas_para_processar = 1
+    
+    logger.info(f"Serão processadas {notas_para_processar} nota(s) pendente(s).")
+    
+    # Processa cada nota na sequência
+    for indice_nota in range(notas_para_processar):
+        proxima_nota = notas_pendentes[indice_nota]
+        
+        logger.info(f"\n{'='*40}")
+        logger.info(f"PROCESSANDO NOTA {indice_nota + 1} DE {notas_para_processar}")
+        logger.info(f"{'='*40}")
+        
+        # Mapeia os dados da nota
+        dados_nota = mapear_dados_nota(proxima_nota['dados'])
+        if dados_nota is None:
+            logger.error(f"Falha ao mapear dados da nota {indice_nota + 1}. Pulando para a próxima.")
+            continue
+        
+        linha_excel = proxima_nota['linha_excel']
+        logger.info(f"Nota a ser processada encontrada na linha {linha_excel} do Excel")
+        
+        # Verifica o sistema operacional
+        sistema_operacional = platform.system()
+        logger.info(f"Sistema Operacional detectado: {sistema_operacional}")
+        
+        try:
+            # PASSO 2: INICIANDO O NAVEGADOR (apenas para a primeira nota)
+            if indice_nota == 0:
+                logger.info("Configurando navegador...")
+                
+                # Configurações do Chrome
+                chrome_opts = Options()
+                chrome_opts.add_argument("--start-maximized")
+                chrome_opts.add_argument("--disable-notifications")
+                
+                # Inicia o navegador
+                driver = webdriver.Chrome(options=chrome_opts)
+                logger.info("Navegador iniciado com sucesso!")
+                
+                # PASSO 3: NAVEGANDO PARA A PÁGINA INICIAL
+                logger.info(f"Acessando URL: {NFS_URL}")
+                driver.get(NFS_URL)
+                
+                # Aguarda carregamento da página
+                esperar_pagina_carregar(driver, timeout=30)
+                
+                # Captura estado inicial
+                salvar_screenshot(driver, "pagina_inicial.png")
+                logger.info(f"Screenshot inicial salvo")
+                
+                # Log informativo
+                logger.info(f"Título da página: {driver.title}")
+                logger.info(f"URL atual: {driver.current_url}")
+                
+                # Salvar HTML inicial
+                salvar_html(driver, "pagina_inicial")
+                
+                # PASSO 3: PROCESSO DE LOGIN
+                logger.info("Iniciando processo de login...")
+                login_sucesso = realizar_login(driver, CPF_CNPJ, SENHA)
+                
+                if not login_sucesso:
+                    logger.error("Falha no login. Impossível continuar a automação.")
+                    return
+                
+                logger.info("LOGIN REALIZADO COM SUCESSO!")
+                
+                # PASSO 4: ACESSAR ÁREA FISCAL
+                logger.info("Tentando acessar área fiscal...")
+                acessar_sucesso = clicar_acessar_fiscal(driver)
+                
+                if not acessar_sucesso:
+                    logger.error("Não foi possível acessar a área fiscal. Impossível continuar.")
+                    return
+                
                 logger.info("Botão 'Acessar' clicado com sucesso!")
                 
                 # AVISO SOBRE CAPTCHA NESTE MOMENTO
@@ -597,74 +2322,332 @@ def main():
                 # Aguarda até 5 minutos (300 segundos) pelo redirecionamento
                 destino_alcancado = aguardar_pagina_destino(driver, PAGINA_DESTINO, tempo_maximo=300)
                 
-                if destino_alcancado:
-                    logger.info("PÁGINA DE DESTINO ALCANÇADA COM SUCESSO!")
-                    # Captura estado final
-                    salvar_screenshot(driver, "pagina_destino.png")
-                    salvar_html(driver, "pagina_destino")
+                if not destino_alcancado:
+                    logger.error("Não foi possível alcançar a página de destino. Impossível continuar.")
+                    return
+                
+                logger.info("PÁGINA DE DESTINO ALCANÇADA COM SUCESSO!")
+                
+                # Captura estado final
+                salvar_screenshot(driver, "pagina_destino.png")
+                salvar_html(driver, "pagina_destino")
+                
+                # PASSO 6: FECHAR AVISO NA PÁGINA DE DESTINO
+                logger.info("Tentando fechar o aviso na página de destino...")
+                fechar_aviso(driver)  # Continuamos mesmo se não conseguirmos fechar
+            
+            # Para todas as notas (incluindo a primeira), seguimos o fluxo:
+            # Se não for a primeira nota, voltamos para a página principal (se necessário)
+            if indice_nota > 0:
+                try:
+                    # Verificar se precisamos voltar à página principal
+                    if not "sistema/66" in driver.current_url:
+                        logger.info("Voltando para a página principal para processar a próxima nota...")
+                        driver.get(PAGINA_DESTINO)
+                        esperar_pagina_carregar(driver, timeout=30)
+                        salvar_screenshot(driver, f"pagina_principal_nota_{indice_nota+1}.png")
                     
-                    # PASSO 6: FECHAR AVISO NA PÁGINA DE DESTINO
-                    logger.info("Tentando fechar o aviso na página de destino...")
-                    aviso_fechado = fechar_aviso(driver)
-                    
-                    if aviso_fechado:
-                        logger.info("AVISO FECHADO COM SUCESSO!")
-                        salvar_screenshot(driver, "apos_fechar_aviso.png")
-                    else:
-                        logger.warning("Não foi possível fechar o aviso automaticamente. Pode ser necessário fechá-lo manualmente.")
-                    
-                    logger.info("AUTENTICAÇÃO CONCLUÍDA COM SUCESSO!")
-                    logger.info("Agora você pode continuar com as operações na área fiscal")
-                    
+                    # Tenta fechar aviso, se houver
+                    fechar_aviso(driver)
+                except Exception as e:
+                    logger.error(f"Erro ao retornar à página principal: {e}")
+                    logger.warning("Tentando continuar mesmo assim...")
+            
+            # PASSO 7: CLICAR NO BOTÃO "EMITIR NOTA FISCAL"
+            logger.info("Tentando clicar no botão 'Emitir Nota Fiscal'...")
+            emitir_nota_sucesso = clicar_emitir_nota_fiscal(driver)
+            
+            if not emitir_nota_sucesso:
+                logger.error(f"Não foi possível clicar no botão 'Emitir Nota Fiscal'. Pulando nota {indice_nota+1}.")
+                continue
+            
+            logger.info("BOTÃO 'EMITIR NOTA FISCAL' CLICADO COM SUCESSO!")
+            logger.info("Aguardando carregamento da próxima página...")
+            time.sleep(3)  # Pausa para carregamento
+            
+            # PASSO 8: CLICAR NO BOTÃO "PRÓXIMO"
+            logger.info("Tentando clicar no botão 'Próximo'...")
+            proximo_sucesso = clicar_proximo(driver)
+            
+            if not proximo_sucesso:
+                logger.error(f"Não foi possível clicar no botão 'Próximo'. Pulando nota {indice_nota+1}.")
+                continue
+            
+            logger.info("BOTÃO 'PRÓXIMO' CLICADO COM SUCESSO!")
+            
+            # Verificar se o fluxo de emissão foi iniciado corretamente
+            time.sleep(3)  # Pequena pausa para carregamento
+            emissao_iniciada = verificar_emissao_iniciada(driver)
+            
+            if not emissao_iniciada:
+                logger.error(f"Não foi possível iniciar o fluxo de emissão. Pulando nota {indice_nota+1}.")
+                continue
+            
+            logger.info("FLUXO DE EMISSÃO DE NOTA FISCAL INICIADO COM SUCESSO!")
+            
+            # PASSO 9: SELECIONAR TIPO DO TOMADOR
+            logger.info("Selecionando 'Pessoa Jurídica' como tipo do tomador...")
+            selecao_sucesso = selecionar_tipo_tomador(driver, tipo="Pessoa Jurídica")
+            
+            if not selecao_sucesso:
+                logger.error(f"Não foi possível selecionar o tipo de tomador. Pulando nota {indice_nota+1}.")
+                continue
+            
+            logger.info("TIPO DO TOMADOR 'PESSOA JURÍDICA' SELECIONADO COM SUCESSO!")
+            salvar_screenshot(driver, "tipo_tomador_selecionado.png")
+            logger.info("Continuando com o preenchimento dos dados da nota fiscal...")
+            
+            # Buscar empresa por CNPJ usando o módulo busca_empresa
+            try:
+                # Importa o módulo de busca de empresa
+                import sys
+                import os
+                
+                # Garante que o diretório atual está no path
+                if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+                    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+                
+                # Agora importa a função de busca de empresa
+                from busca_empresa import preencher_busca_cnpj
+                
+                # Obtém os dados necessários
+                cnpj = dados_nota.get('cnpj_tomador', '')
+                nome_empresa = dados_nota.get('razao_social', '')
+                
+                # Log dos dados (mascarando o CNPJ por segurança)
+                if len(cnpj) > 6:
+                    cnpj_mascarado = f"{cnpj[:4]}****{cnpj[-2:]}"
                 else:
-                    logger.error("Não foi possível alcançar a página de destino no tempo limite.")
-                    logger.error("Verifique manualmente se o sistema está funcionando corretamente.")
+                    cnpj_mascarado = "****"
+                
+                logger.info(f"Buscando empresa: {nome_empresa}")
+                logger.info(f"CNPJ: {cnpj_mascarado}")
+                
+                # Salva screenshot antes da busca
+                salvar_screenshot(driver, "antes_busca_empresa.png")
+                
+                # Usa a função do módulo busca_empresa para localizar e selecionar a empresa
+                # Passa o logger para manter o registro de logs consistente
+                busca_resultado = preencher_busca_cnpj(driver, cnpj, nome_empresa, logger)
+                
+                if busca_resultado:
+                    logger.info("EMPRESA ENCONTRADA E SELECIONADA COM SUCESSO!")
+                    salvar_screenshot(driver, "apos_selecao_empresa.png")
+                else:
+                    logger.warning("Não foi possível encontrar ou selecionar a empresa pelo CNPJ automaticamente.")
+                    logger.warning("Tentando abordagem alternativa...")
                     
+                    # Pergunta ao usuário se deseja continuar manualmente
+                    continuar_manual = input("Empresa não encontrada automaticamente. Deseja selecionar manualmente? (s/n): ")
+                    if continuar_manual.lower() == 's':
+                        logger.info("Aguardando seleção manual da empresa pelo usuário...")
+                        input("Selecione a empresa manualmente e pressione ENTER para continuar...")
+                        logger.info("Continuando após seleção manual da empresa")
+                    else:
+                        logger.warning("Processo interrompido pelo usuário após falha na busca por empresa")
+                        return False
+            except ImportError as e:
+                logger.error(f"Erro ao importar módulo busca_empresa.py: {e}")
+                logger.error("Verifique se o arquivo busca_empresa.py está presente no diretório")
+                return False
+            except Exception as e:
+                logger.error(f"Erro durante a busca de empresa: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                
+                # Pergunta ao usuário se deseja continuar manualmente
+                continuar_manual = input("Erro durante a busca de empresa. Deseja continuar manualmente? (s/n): ")
+                if continuar_manual.lower() == 's':
+                    logger.info("Continuando manualmente após erro...")
+                else:
+                    logger.warning("Processo interrompido pelo usuário após erro")
+                    return False
+            
+            # PASSO 10: PREENCHER DADOS DO TOMADOR
+            logger.info("Preenchendo dados do tomador com informações do Excel...")
+            logger.info(f"CNPJ Tomador: {dados_nota.get('cnpj_tomador', '')[:4]}****{dados_nota.get('cnpj_tomador', '')[-2:]}")
+            logger.info(f"Razão Social: {dados_nota.get('razao_social', '')}")
+            preenchimento_tomador = preencher_dados_tomador(driver, dados_nota)
+            
+            if not preenchimento_tomador:
+                logger.error(f"Falha ao preencher dados do tomador. Pulando nota {indice_nota+1}.")
+                continue
+            
+            logger.info("DADOS DO TOMADOR PREENCHIDOS COM SUCESSO!")
+              
+            # PASSO 11: PREENCHER DADOS DO SERVIÇO
+            logger.info("Preenchendo dados do serviço...")
+            try:
+                # Tenta importar o módulo especializado
+                from preencher_dados_servico import preencher_formulario_servico
+                
+                # Usa a função do módulo especializado passando o logger
+                preenchimento_servico = preencher_formulario_servico(driver, dados_nota, logger)
+            except ImportError:
+                logger.warning("Módulo preencher_dados_servico não encontrado, usando função interna")
+                preenchimento_servico = preencher_dados_servico(driver, dados_nota)
+            except Exception as e:
+                logger.error(f"Erro ao usar módulo especializado: {e}")
+                logger.warning("Tentando com a função interna...")
+                preenchimento_servico = preencher_dados_servico(driver, dados_nota)
+            
+            if not preenchimento_servico:
+                logger.error(f"Falha ao preencher dados do serviço. Pulando nota {indice_nota+1}.")
+                continue
+            
+            logger.info("DADOS DO SERVIÇO PREENCHIDOS COM SUCESSO!")
+            
+            # PASSO 12: AVANÇAR NO FLUXO
+            logger.info("Tentando avançar para a próxima etapa...")
+            avancar_sucesso = procurar_e_clicar_proximo(driver)
+            
+            if not avancar_sucesso:
+                logger.error(f"Não foi possível avançar para a próxima etapa. Pulando nota {indice_nota+1}.")
+                continue
+            
+            logger.info("AVANÇOU COM SUCESSO PARA A PRÓXIMA ETAPA!")
+            salvar_screenshot(driver, "formulario_preenchido_avancar.png")
+            
+            # PASSO 13: PREENCHER TRIBUTOS FEDERAIS
+            logger.info("Preenchendo tributos federais (IR, PIS, COFINS, CSLL)...")
+            try:
+                # Tenta importar o módulo especializado para tributos
+                from preencher_tributos import preencher_tributos
+                
+                # Verifica se há tributos definidos na nota
+                tem_tributos = any([
+                    dados_nota.get('irrf', dados_nota.get('valor_ir', 0)) != 0,
+                    dados_nota.get('pis', dados_nota.get('valor_pis', 0)) != 0,
+                    dados_nota.get('cofins', dados_nota.get('valor_cofins', 0)) != 0,
+                    dados_nota.get('csll', dados_nota.get('valor_csll', 0)) != 0
+                ])
+                
+                # Se tem tributos, preenche os campos
+                if tem_tributos:
+                    logger.info("Preenchendo campos de tributos federais...")
+                    # Usa a função do módulo especializado passando o logger
+                    preenchimento_tributos = preencher_tributos(driver, dados_nota, logger)
+                    
+                    if preenchimento_tributos:
+                        logger.info("TRIBUTOS FEDERAIS PREENCHIDOS COM SUCESSO!")
+                    else:
+                        logger.warning("Houve problemas ao preencher tributos federais")
+                        # Pergunta se deseja continuar mesmo assim
+                        continuar_tributos = input("Houve problemas ao preencher os tributos federais. Deseja continuar mesmo assim? (s/n): ")
+                        if continuar_tributos.lower() != 's':
+                            logger.warning("Processo interrompido pelo usuário após falha nos tributos federais")
+                            return
+                else:
+                    logger.info("Nota não possui tributos federais para preencher")
+            except ImportError:
+                logger.warning("Módulo preencher_tributos não encontrado, pulando essa etapa")
+            except Exception as e:
+                logger.error(f"Erro ao preencher tributos federais: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                # Pergunta se deseja continuar mesmo assim
+                continuar_tributos = input("Erro ao preencher os tributos federais. Deseja continuar mesmo assim? (s/n): ")
+                if continuar_tributos.lower() != 's':
+                    logger.warning("Processo interrompido pelo usuário após erro")
+                    return
+            
+            salvar_screenshot(driver, "apos_preencher_tributos.png")
+            
+            # PASSO 14: FINALIZAR EMISSÃO                                                
+            logger.info("FORMULÁRIO PREENCHIDO - PRONTO PARA EMISSÃO")
+            logger.info("Verifique manualmente se todos os dados estão corretos")
+            
+            # Pergunta ao usuário se deseja continuar com a emissão
+            continuar = input("Todos os dados estão corretos? Pressione ENTER para emitir a nota ou 'n' para cancelar: ")
+            if continuar.lower() != 'n':
+                # PASSO 13: Finalizar emissão da nota fiscal
+                logger.info("Finalizando a emissão da nota fiscal...")
+                   # Tenta clicar no botão para emitir a nota
+                # Lista de seletores possíveis para o botão Emitir
+                seletores_emitir = [
+                    "button[name='emitir']", 
+                    "button.botao-primario", 
+                    "button.__estrutura_componente_base.botao.botao-primario", 
+                    "button[type='submit']"
+                ]
+                
+                # Tenta clicar usando a função procurar_e_clicar
+                emitir_sucesso = procurar_e_clicar(driver, seletores_emitir)
+                
+                if emitir_sucesso:
+                    logger.info("NOTA FISCAL EMITIDA COM SUCESSO!")
+                    salvar_screenshot(driver, "nota_emitida.png")
+                    
+                    # Aguarda um tempo para ter certeza que a página de confirmação carregou
+                    logger.info("Aguardando carregamento da página de confirmação...")
+                    time.sleep(5)
+                    
+                    # Extrai o número da nota fiscal
+                    logger.info("Tentando extrair o número da nota fiscal...")
+                    numero_nota = extrair_numero_nota_fiscal(driver)
+                    
+                    if numero_nota:
+                        logger.info(f"NÚMERO DA NOTA EXTRAÍDO COM SUCESSO: {numero_nota}")
+                        
+                        # Atualiza o número da nota no Excel
+                        logger.info(f"Atualizando Excel com o número da nota: {numero_nota}")
+                        atualizacao_sucesso = atualizar_numero_nota_excel(
+                            EXCEL_PATH, linha_excel, numero_nota)
+                        
+                        if atualizacao_sucesso:
+                            logger.info("ARQUIVO EXCEL ATUALIZADO COM SUCESSO!")
+                        else:
+                            logger.error("FALHA AO ATUALIZAR O ARQUIVO EXCEL")
+                            logger.error(f"Por favor, atualize manualmente o número da nota {numero_nota} na linha {linha_excel} do Excel")
+                    else:
+                        logger.warning("Não foi possível extrair o número da nota automaticamente")
+                        numero_manual = input("Por favor, informe o número da nota fiscal emitida (deixe em branco para ignorar): ")
+                        if numero_manual.strip():
+                            logger.info(f"Atualizando Excel com o número informado manualmente: {numero_manual}")
+                            atualizacao_sucesso = atualizar_numero_nota_excel(
+                                EXCEL_PATH, linha_excel, numero_manual)
+                            
+                            if atualizacao_sucesso:
+                                logger.info("ARQUIVO EXCEL ATUALIZADO COM SUCESSO!")
+                            else:
+                                logger.error("FALHA AO ATUALIZAR O ARQUIVO EXCEL")
+                        else:
+                            logger.warning("Nenhum número informado. O Excel não será atualizado.")
+                else:
+                    logger.warning("Não foi possível clicar no botão para finalizar a emissão")
+                    logger.info("Prossiga manualmente para completar a emissão da nota fiscal")
             else:
-                logger.error("Não foi possível clicar no botão 'Acessar'")
-                salvar_screenshot(driver, "falha_acessar.png")
-        else:
-            logger.error("Falha no login!")
-            salvar_screenshot(driver, "falha_login.png")
-            salvar_html(driver, "pagina_falha_login")
+                logger.info("Emissão de nota fiscal cancelada pelo usuário")
             
-            # Verifica mensagens de erro
-            mensagens_erro = verificar_mensagens_erro(driver)
-            if mensagens_erro:
-                logger.error("Mensagens de erro encontradas:")
-                for msg in mensagens_erro:
-                    logger.error(f"- {msg}")
+            logger.info("PROCESSO DE AUTOMAÇÃO CONCLUÍDO")
+        except Exception as e:
+            logger.error(f"Erro durante o processamento da nota {indice_nota+1}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             
-            logger.error("Sugestões de resolução:")
-            logger.error("1. Verifique se suas credenciais estão corretas")
-            logger.error("2. Verifique se não há limite de tentativas de login")
-            logger.error("3. Tente acessar o site manualmente para confirmar se está funcionando")
+            if 'driver' in locals():
+                salvar_screenshot(driver, f"erro_execucao_nota_{indice_nota+1}.png")
+                logger.info(f"Screenshot do erro salvo em logs/imagens/erro_execucao_nota_{indice_nota+1}.png")
+                salvar_html(driver, f"pagina_erro_nota_{indice_nota+1}")
+            
+            # Perguntar se deseja continuar com a próxima nota
+            if indice_nota < notas_para_processar - 1:  # Se não for a última nota
+                continuar = input(f"Ocorreu um erro no processamento da nota {indice_nota+1}. Deseja continuar com a próxima nota? (s/n): ")
+                if continuar.lower() != 's':
+                    logger.info("Interrompendo o processamento de notas por escolha do usuário.")
+                    break
     
-    except Exception as e:
-        logger.error(f"Erro durante a automação: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        
-        if 'driver' in locals():
-            salvar_screenshot(driver, "erro_execucao.png")
-            logger.info("Screenshot do erro salvo em logs/imagens/erro_execucao.png")
-            salvar_html(driver, "pagina_erro")
-        
-        logger.error("\nSUGESTÕES PARA RESOLVER O PROBLEMA:")
-        logger.error("1. Certifique-se de que o arquivo .env existe e contém as variáveis necessárias")
-        logger.error("2. Verifique se sua conexão com a internet está estável")
-        logger.error("3. Tente acessar o site manualmente para confirmar que está funcionando")
-        
-    finally:
-        # Para manter a janela aberta após a execução, pergunte ao usuário se deseja fechar
-        if 'driver' in locals():
-            fechar = input("Deseja fechar o navegador? (s/n): ")
-            if fechar.lower() == 's':
-                driver.quit()
-                logger.info("Navegador fechado.")
-            else:
-                logger.info("Navegador mantido aberto. Você pode fechá-lo manualmente quando terminar.")
-                logger.info("DICA: Aproveite para navegar manualmente e entender como o site funciona.")
-
-if __name__ == "__main__":
-    main()
+    # Ao final do processamento de todas as notas
+    logger.info("\n" + "="*80)
+    logger.info(f"PROCESSAMENTO DE NOTAS CONCLUÍDO: {min(indice_nota + 1, notas_para_processar)} de {notas_para_processar} notas processadas")
+    logger.info("="*80 + "\n")
+    
+    # Para manter a janela aberta após a execução, pergunte ao usuário se deseja fechar
+    if 'driver' in locals():
+        fechar = input("Deseja fechar o navegador? (s/n): ")
+        if fechar.lower() == 's':
+            driver.quit()
+            logger.info("Navegador fechado.")
+        else:
+            logger.info("Navegador mantido aberto. Você pode fechá-lo manualmente quando terminar.")
+            logger.info("DICA: Aproveite para navegar manualmente e entender como o site funciona.")
