@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Portal NFSe - Nota Emitida com Sucesso</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header {
+            background-color: #006699;
+            color: white;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        
+        .success-message {
+            background-color: #dff0d8;
+            color: #3c763d;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .nota-info {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 30px;
+        }
+        
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            width: 200px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .card:hover {
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+            transform: translateY(-5px);
+        }
+        
+        .card-icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+        
+        .componente_card_texto_titulo {
+            font-weight: bold;
+            font-size: 16px;
+            color: #006699;
+            margin-bottom: 10px;
+        }
+        
+        .card-description {
+            color: #666;
+            font-size: 12px;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: #006699;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: bold;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        
+        .btn-primary {
+            background-color: #006699;
+        }
+        
+        .btn-success {
+            background-color: #28a745;
+        }
+        
+        .btn-info {
+            background-color: #17a2b8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>Sistema de Emissão de Notas Fiscais</h2>
+        </div>
+        
+        <div class="success-message">
+            <h3>✓ Nota Fiscal emitida com sucesso!</h3>
+            <p>A Nota Fiscal de Serviços Eletrônica (NFS-e) foi emitida com sucesso e está disponível para consulta.</p>
+        </div>
+        
+        <div class="nota-info">
+            <h3>Informações da Nota Fiscal</h3>
+            <table width="100%">
+                <tr>
+                    <td width="30%"><strong>Número da Nota:</strong></td>
+                    <td>12345</td>
+                </tr>
+                <tr>
+                    <td><strong>Data de Emissão:</strong></td>
+                    <td>04/06/2025</td>
+                </tr>
+                <tr>
+                    <td><strong>Tomador:</strong></td>
+                    <td>Empresa XYZ Ltda</td>
+                </tr>
+                <tr>
+                    <td><strong>CNPJ do Tomador:</strong></td>
+                    <td>12.345.678/0001-99</td>
+                </tr>
+                <tr>
+                    <td><strong>Valor do Serviço:</strong></td>
+                    <td>R$ 1.500,00</td>
+                </tr>
+                <tr>
+                    <td><strong>Situação:</strong></td>
+                    <td>Emitida</td>
+                </tr>
+            </table>
+        </div>
+        
+        <div>
+            <a href="javascript:void(0);" class="btn btn-primary">Imprimir Nota</a>
+            <a href="javascript:void(0);" class="btn btn-success">Download XML</a>
+            <a href="javascript:void(0);" class="btn btn-info">Download PDF</a>
+        </div>
+        
+        <h3>O que deseja fazer agora?</h3>
+        
+        <div class="actions">
+            <a href="javascript:void(0);" class="card componente_card">
+                <div class="card-icon">📄</div>
+                <div class="componente_card_texto_titulo">Emitir Nota Fiscal</div>
+                <div class="card-description">Emitir uma nova Nota Fiscal de Serviços Eletrônica (NFS-e).</div>
+            </a>
+            
+            <a href="javascript:void(0);" class="card">
+                <div class="card-icon">🔍</div>
+                <div class="componente_card_texto_titulo">Consultar Notas</div>
+                <div class="card-description">Consulte todas as notas emitidas e recebidas.</div>
+            </a>
+            
+            <a href="javascript:void(0);" class="card">
+                <div class="card-icon">📊</div>
+                <div class="componente_card_texto_titulo">Relatórios</div>
+                <div class="card-description">Acesse relatórios e estatísticas de suas notas fiscais.</div>
+            </a>
+            
+            <a href="javascript:void(0);" class="card">
+                <div class="card-icon">🏠</div>
+                <div class="componente_card_texto_titulo">Página Inicial</div>
+                <div class="card-description">Voltar para a página inicial do sistema.</div>
+            </a>
+        </div>
+    </div>
+</body>
+</html>

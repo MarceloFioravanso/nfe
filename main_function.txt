@@ -1,0 +1,427 @@
+def main():
+    # Importa módulos necessários no escopo local da função
+    import os
+    import platform
+    import sys
+    import traceback
+    
+    # PASSO 1: CARREGAMENTO DOS DADOS DO EXCEL
+    logger.info("="*80)
+    logger.info("INICIANDO AUTOMAÇÃO DE EMISSÃO DE NOTAS FISCAIS")
+    logger.info("="*80)
+    
+    # Carrega os dados do Excel
+    df_excel = carregar_dados_excel(EXCEL_PATH)
+    if df_excel is None:
+        logger.error("Falha ao carregar dados do Excel. Encerrando automação.")
+        return
+
+    while True:
+        # Encontra a próxima nota a ser processada
+        proxima_nota = encontrar_proxima_nota(df_excel)
+        if proxima_nota is None:
+            logger.info("Nenhuma nota pendente encontrada. Todas as notas podem já ter sido processadas.")
+            break
+
+        # Mapeia os dados da nota
+        dados_nota = mapear_dados_nota(proxima_nota['dados'])
+        if dados_nota is None:
+            logger.error("Falha ao mapear dados da nota. Encerrando automação.")
+            continue
+
+        linha_excel = proxima_nota['linha_excel']
+        logger.info(f"Nota a ser processada encontrada na linha {linha_excel} do Excel")
+        
+        # Verifica o sistema operacional
+        sistema_operacional = platform.system()
+        logger.info(f"Sistema Operacional detectado: {sistema_operacional}")
+        
+        try:
+            # PASSO 2: INICIANDO O NAVEGADOR
+            logger.info("Configurando navegador...")
+            
+            # Configurações do Chrome
+            chrome_opts = Options()
+            chrome_opts.add_argument("--start-maximized")
+            chrome_opts.add_argument("--disable-notifications")
+            
+            # Inicia o navegador
+            driver = webdriver.Chrome(options=chrome_opts)
+            logger.info("Navegador iniciado com sucesso!")
+            
+            # PASSO 3: NAVEGANDO PARA A PÁGINA INICIAL
+            logger.info(f"Acessando URL: {NFS_URL}")
+            driver.get(NFS_URL)
+            
+            # Aguarda carregamento da página
+            esperar_pagina_carregar(driver, timeout=30)
+            # Captura estado inicial
+            salvar_screenshot(driver, "pagina_inicial.png")
+            logger.info(f"Screenshot inicial salvo em {obter_caminho_absoluto('logs/imagens/pagina_inicial.png')}")
+            
+            # Log informativo
+            logger.info(f"Título da página: {driver.title}")
+            logger.info(f"URL atual: {driver.current_url}")
+            # Salvar HTML inicial
+            salvar_html(driver, "pagina_inicial")
+            
+            # PASSO 3: PROCESSO DE LOGIN
+            logger.info("Iniciando processo de login...")
+            login_sucesso = realizar_login(driver, CPF_CNPJ, SENHA)
+            
+            if login_sucesso:
+                logger.info("LOGIN REALIZADO COM SUCESSO!")
+                
+                # PASSO 4: ACESSAR ÁREA FISCAL
+                logger.info("Tentando acessar área fiscal...")
+                acessar_sucesso = clicar_acessar_fiscal(driver)
+                
+                if acessar_sucesso:
+                    logger.info("Botão 'Acessar' clicado com sucesso!")
+                    
+                    # AVISO SOBRE CAPTCHA NESTE MOMENTO
+                    logger.info("\n" + "*"*80)
+                    logger.info("ATENÇÃO: RESOLVA O CAPTCHA AGORA!")
+                    logger.info("Um CAPTCHA deve aparecer após clicar no botão 'Acessar'.")
+                    logger.info("Por favor resolva o CAPTCHA manualmente na janela do navegador.")
+                    logger.info("*"*80 + "\n")
+                    
+                    # Pausa para permitir resolução manual de CAPTCHA
+                    input("Pressione ENTER depois de resolver o CAPTCHA para continuar...")
+                    
+                    # PASSO 5: AGUARDAR REDIRECIONAMENTO PARA A PÁGINA DE DESTINO
+                    logger.info(f"Aguardando redirecionamento para: {PAGINA_DESTINO}")
+                    logger.info("Este processo pode levar vários minutos. Por favor, aguarde...")
+                    # Aguarda até 5 minutos (300 segundos) pelo redirecionamento
+                    destino_alcancado = aguardar_pagina_destino(driver, PAGINA_DESTINO, tempo_maximo=300)
+                    
+                    if destino_alcancado:
+                        logger.info("PÁGINA DE DESTINO ALCANÇADA COM SUCESSO!")
+                        # Captura estado final
+                        salvar_screenshot(driver, "pagina_destino.png")
+                        salvar_html(driver, "pagina_destino")
+                        
+                        # PASSO 6: FECHAR AVISO NA PÁGINA DE DESTINO
+                        logger.info("Tentando fechar o aviso na página de destino...")
+                        aviso_fechado = fechar_aviso(driver)
+                        
+                        if aviso_fechado:
+                            logger.info("AVISO FECHADO COM SUCESSO!")
+                            salvar_screenshot(driver, "apos_fechar_aviso.png")
+                        else:
+                            logger.warning("Não foi possível fechar o aviso automaticamente. Pode ser necessário fechá-lo manualmente.")
+                        
+                        logger.info("AUTENTICAÇÃO CONCLUÍDA COM SUCESSO!")
+                        
+                        # PASSO 7: CLICAR NO BOTÃO "EMITIR NOTA FISCAL"
+                        logger.info("Tentando clicar no botão 'Emitir Nota Fiscal'...")
+                        emitir_nota_sucesso = clicar_emitir_nota_fiscal(driver)
+                        
+                        if emitir_nota_sucesso:
+                            logger.info("BOTÃO 'EMITIR NOTA FISCAL' CLICADO COM SUCESSO!")
+                            logger.info("Aguardando carregamento da próxima página...")
+                            time.sleep(3)  # Pausa para carregamento
+                            
+                            # PASSO 8: CLICAR NO BOTÃO "PRÓXIMO"
+                            logger.info("Tentando clicar no botão 'Próximo'...")
+                            proximo_sucesso = procurar_e_clicar_proximo(driver)
+                            
+                            if proximo_sucesso:
+                                logger.info("BOTÃO 'PRÓXIMO' CLICADO COM SUCESSO!")
+                                # Verificar se o fluxo de emissão foi iniciado corretamente
+                                time.sleep(3)  # Pequena pausa para carregamento
+                                emissao_iniciada = verificar_emissao_iniciada(driver)
+                                
+                                if emissao_iniciada:
+                                    logger.info("FLUXO DE EMISSÃO DE NOTA FISCAL INICIADO COM SUCESSO!")
+                                    
+                                    # PASSO 9: SELECIONAR TIPO DO TOMADOR
+                                    logger.info("Selecionando 'Pessoa Jurídica' como tipo do tomador...")
+                                    selecao_sucesso = selecionar_tipo_tomador(driver, tipo="Pessoa Jurídica")
+                                    if selecao_sucesso:
+                                        logger.info("TIPO DO TOMADOR 'PESSOA JURÍDICA' SELECIONADO COM SUCESSO!")
+                                        salvar_screenshot(driver, "tipo_tomador_selecionado.png")
+                                        logger.info("Continuando com o preenchimento dos dados da nota fiscal...")
+                                        
+                                        # Buscar empresa por CNPJ usando o módulo busca_empresa
+                                        try:
+                                            # Importa o módulo de busca de empresa
+                                            import sys
+                                            import os
+                                            
+                                            # Garante que o diretório atual está no path
+                                            if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+                                                sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+                                            
+                                            # Agora importa a função de busca de empresa
+                                            from busca_empresa import preencher_busca_cnpj
+                                            
+                                            # Obtém os dados necessários
+                                            cnpj = dados_nota.get('cnpj_tomador', '')
+                                            nome_empresa = dados_nota.get('razao_social', '')
+                                            
+                                            # Log dos dados (mascarando o CNPJ por segurança)
+                                            if len(cnpj) > 6:
+                                                cnpj_mascarado = f"{cnpj[:4]}****{cnpj[-2:]}"
+                                            else:
+                                                cnpj_mascarado = "****"
+                                            
+                                            logger.info(f"Buscando empresa: {nome_empresa}")
+                                            logger.info(f"CNPJ: {cnpj_mascarado}")
+                                            
+                                            # Salva screenshot antes da busca
+                                            salvar_screenshot(driver, "antes_busca_empresa.png")
+                                            
+                                            # Usa a função do módulo busca_empresa para localizar e selecionar a empresa
+                                            # Passa o logger para manter o registro de logs consistente
+                                            busca_resultado = preencher_busca_cnpj(driver, cnpj, nome_empresa, logger)
+                                            
+                                            if busca_resultado:
+                                                logger.info("EMPRESA ENCONTRADA E SELECIONADA COM SUCESSO!")
+                                                salvar_screenshot(driver, "apos_selecao_empresa.png")
+                                                
+                                                # PASSO 10: PREENCHER ENDEREÇO (SE NECESSÁRIO)
+                                                logger.info("Verificando se é necessário preencher dados de endereço...")
+                                                resultado_endereco = preencher_dados_tomador(driver, dados_nota)
+                                                
+                                                # Se chegou até aqui, continua o fluxo
+                                                logger.info("Prosseguindo com a emissão da nota fiscal...")
+                                                
+                                                # PASSO 11: Preencher dados do serviço
+                                                logger.info("Iniciando preenchimento dos dados do serviço...")
+                                                try:
+                                                    # Tenta importar o módulo de preenchimento de dados do serviço
+                                                    from preencher_dados_servico import preencher_dados_servico
+                                                    
+                                                    # Usa a função do módulo para preencher os dados do serviço
+                                                    preenchimento_servico = preencher_dados_servico(driver, dados_nota, logger)
+                                                    
+                                                    if preenchimento_servico:
+                                                        logger.info("DADOS DO SERVIÇO PREENCHIDOS COM SUCESSO!")
+                                                        salvar_screenshot(driver, "apos_preencher_dados_servico.png")
+                                                    else:
+                                                        logger.warning("Houve problemas ao preencher dados do serviço")
+                                                        # Pergunta se deseja continuar mesmo assim
+                                                        continuar_servico = input("Houve problemas ao preencher os dados do serviço. Deseja continuar mesmo assim? (s/n): ")
+                                                        if continuar_servico.lower() != 's':
+                                                            logger.warning("Processo interrompido pelo usuário após falha nos dados do serviço")
+                                                            return
+                                                except ImportError:
+                                                    logger.warning("Módulo preencher_dados_servico não encontrado, pulando essa etapa")
+                                                except Exception as e:
+                                                    logger.error(f"Erro ao preencher dados do serviço: {e}")
+                                                    logger.error(traceback.format_exc())
+                                                    # Pergunta se deseja continuar mesmo assim
+                                                    continuar_servico = input("Erro ao preencher os dados do serviço. Deseja continuar mesmo assim? (s/n): ")
+                                                    if continuar_servico.lower() != 's':
+                                                        logger.warning("Processo interrompido pelo usuário após erro nos dados do serviço")
+                                                        return
+                                                
+                                                # PASSO 12: Preencher tributos federais
+                                                logger.info("Verificando se há tributos federais para preencher...")
+                                                try:
+                                                    # Tenta importar o módulo de preenchimento de tributos
+                                                    from preencher_tributos import preencher_tributos
+                                                    
+                                                    # Verifica se os campos necessários para tributos estão presentes
+                                                    campos_tributos = ['irrf', 'pis', 'cofins', 'csll']
+                                                    tem_tributos = any(dados_nota.get(campo, 0) > 0 for campo in campos_tributos)
+                                                    
+                                                    logger.info(f"Dados de tributos detectados: {[
+                                                        f'{campo}: {dados_nota.get(campo, 0)}' 
+                                                        for campo in campos_tributos
+                                                    ]}")
+                                                    
+                                                    # Se tem tributos, preenche os campos
+                                                    if tem_tributos:
+                                                        logger.info("Preenchendo campos de tributos federais...")
+                                                        # Usa a função do módulo especializado passando o logger
+                                                        preenchimento_tributos = preencher_tributos(driver, dados_nota, logger)
+                                                        
+                                                        if preenchimento_tributos:
+                                                            logger.info("TRIBUTOS FEDERAIS PREENCHIDOS COM SUCESSO!")
+                                                        else:
+                                                            logger.warning("Houve problemas ao preencher tributos federais")
+                                                            # Pergunta se deseja continuar mesmo assim
+                                                            continuar_tributos = input("Houve problemas ao preencher os tributos federais. Deseja continuar mesmo assim? (s/n): ")
+                                                            if continuar_tributos.lower() != 's':
+                                                                logger.warning("Processo interrompido pelo usuário após falha nos tributos federais")
+                                                                return
+                                                    else:
+                                                        logger.info("Nota não possui tributos federais para preencher")
+                                                except ImportError:
+                                                    logger.warning("Módulo preencher_tributos não encontrado, pulando essa etapa")
+                                                except Exception as e:
+                                                    logger.error(f"Erro ao preencher tributos federais: {e}")
+                                                    logger.error(traceback.format_exc())
+                                                    # Pergunta se deseja continuar mesmo assim
+                                                    continuar_tributos = input("Erro ao preencher os tributos federais. Deseja continuar mesmo assim? (s/n): ")
+                                                    if continuar_tributos.lower() != 's':
+                                                        logger.warning("Processo interrompido pelo usuário após erro nos tributos federais")
+                                                        return
+                                                
+                                                salvar_screenshot(driver, "apos_preencher_tributos.png")
+                                                
+                                                # PASSO 13: FINALIZAR EMISSÃO
+                                                logger.info("FORMULÁRIO PREENCHIDO - PRONTO PARA EMISSÃO")
+                                                logger.info("Verifique manualmente se todos os dados estão corretos")
+                                                
+                                                # Pergunta ao usuário se deseja continuar com a emissão
+                                                continuar = input("Todos os dados estão corretos? Pressione ENTER para emitir a nota ou 'n' para cancelar: ")
+                                                if continuar.lower() != 'n':
+                                                    # PASSO 13: Finalizar emissão da nota fiscal
+                                                    logger.info("Finalizando a emissão da nota fiscal...")
+                                                    
+                                                    # Tenta clicar no botão para emitir a nota
+                                                    # Lista de seletores possíveis para o botão Emitir
+                                                    seletores_emitir = [
+                                                        "button[name='emitir']", 
+                                                        "button.botao-primario", 
+                                                        "button.__estrutura_componente_base.botao.botao-primario", 
+                                                        "button[type='submit']"
+                                                    ]
+                                                    
+                                                    # Tenta clicar usando a função procurar_e_clicar
+                                                    emitir_sucesso = procurar_e_clicar(driver, seletores_emitir)
+                                                    
+                                                    if emitir_sucesso:
+                                                        logger.info("NOTA FISCAL EMITIDA COM SUCESSO!")
+                                                        salvar_screenshot(driver, "nota_emitida.png")
+                                                        
+                                                        # Aguarda um tempo para ter certeza que a página de confirmação carregou
+                                                        logger.info("Aguardando carregamento da página de confirmação...")
+                                                        time.sleep(5)
+                                                        
+                                                        # Extrai o número da nota fiscal
+                                                        logger.info("Tentando extrair o número da nota fiscal...")
+                                                        numero_nota = extrair_numero_nota_fiscal(driver)
+                                                        
+                                                        if numero_nota:
+                                                            logger.info(f"NÚMERO DA NOTA EXTRAÍDO COM SUCESSO: {numero_nota}")
+                                                            
+                                                            # Atualiza o número da nota no Excel
+                                                            logger.info(f"Atualizando Excel com o número da nota: {numero_nota}")
+                                                            atualizacao_sucesso = atualizar_numero_nota_excel(
+                                                                EXCEL_PATH, linha_excel, numero_nota)
+                                                            
+                                                            if atualizacao_sucesso:
+                                                                logger.info("ARQUIVO EXCEL ATUALIZADO COM SUCESSO!")
+                                                            else:
+                                                                logger.error("FALHA AO ATUALIZAR O ARQUIVO EXCEL")
+                                                                logger.error(f"Por favor, atualize manualmente o número da nota {numero_nota} na linha {linha_excel} do Excel")
+                                                        else:
+                                                            logger.warning("Não foi possível extrair o número da nota automaticamente")
+                                                            
+                                                            # Pergunta o número da nota ao usuário
+                                                            numero_manual = input("Digite o número da nota fiscal emitida (deixe em branco para pular): ")
+                                                            
+                                                            if numero_manual.strip():
+                                                                logger.info(f"Número da nota informado manualmente: {numero_manual}")
+                                                                
+                                                                # Atualiza o Excel com o número informado manualmente
+                                                                atualizacao_sucesso = atualizar_numero_nota_excel(
+                                                                    EXCEL_PATH, linha_excel, numero_manual)
+                                                                
+                                                                if atualizacao_sucesso:
+                                                                    logger.info("ARQUIVO EXCEL ATUALIZADO COM SUCESSO!")
+                                                                else:
+                                                                    logger.error("FALHA AO ATUALIZAR O ARQUIVO EXCEL")
+                                                            else:
+                                                                logger.warning("Nenhum número informado. Excel não foi atualizado.")
+                                                        
+                                                        # Continua para a próxima nota
+                                                        logger.info("Nota fiscal emitida com sucesso. Continuando para a próxima nota...")
+                                                        
+                                                        # Pergunta se deseja continuar com próxima nota
+                                                        continuar_proxima = input("Deseja processar a próxima nota? (s/n): ")
+                                                        if continuar_proxima.lower() != 's':
+                                                            logger.info("Processo interrompido pelo usuário")
+                                                            break
+                                                    else:
+                                                        logger.warning("Não foi possível avançar automaticamente")
+                                                        logger.info("Prossiga manualmente para completar a emissão da nota fiscal")
+                                                        
+                                                        # Em caso de erro, pergunta se quer tentar a próxima nota
+                                                        tentar_proxima = input("Houve erro nesta nota. Deseja tentar a próxima? (s/n): ")
+                                                        if tentar_proxima.lower() != 's':
+                                                            break
+                                            else:
+                                                logger.warning("Não foi possível encontrar ou selecionar a empresa pelo CNPJ automaticamente.")
+                                                logger.warning("Tentando abordagem alternativa...")
+                                                
+                                                # Pergunta ao usuário se deseja continuar manualmente
+                                                continuar_manual = input("Empresa não encontrada automaticamente. Deseja selecionar manualmente? (s/n): ")
+                                                if continuar_manual.lower() == 's':
+                                                    logger.info("Aguardando seleção manual da empresa pelo usuário...")
+                                                    input("Selecione a empresa manualmente e pressione ENTER para continuar...")
+                                                    logger.info("Continuando após seleção manual da empresa")
+                                                else:
+                                                    logger.warning("Processo interrompido pelo usuário após falha na busca por empresa")
+                                                    break
+                                        except Exception as e:
+                                            logger.error(f"Erro durante a busca de empresa: {e}")
+                                            logger.error(traceback.format_exc())
+                                            
+                                            # Pergunta ao usuário se deseja continuar manualmente
+                                            continuar_manual = input("Erro durante a busca de empresa. Deseja continuar manualmente? (s/n): ")
+                                            if continuar_manual.lower() == 's':
+                                                logger.info("Continuando manualmente após erro...")
+                                            else:
+                                                logger.warning("Processo interrompido pelo usuário após erro")
+                                                break
+                                    else:
+                                        logger.warning("Não foi possível selecionar o tipo do tomador")
+                                        salvar_screenshot(driver, "erro_selecao_tipo_tomador.png")
+                                        break
+                                else:
+                                    logger.error("Não foi possível confirmar que o fluxo de emissão foi iniciado corretamente")
+                                    salvar_screenshot(driver, "falha_fluxo_emissao.png")
+                                    break
+                            else:
+                                logger.error("Não foi possível clicar no botão 'Próximo'")
+                                salvar_screenshot(driver, "falha_botao_proximo.png")
+                                break
+                        else:
+                            logger.error("Não foi possível clicar no botão 'Emitir Nota Fiscal'")
+                            salvar_screenshot(driver, "falha_emitir_nota.png")
+                            break
+                    else:
+                        logger.error("Não foi possível atingir a página de destino após login")
+                        salvar_screenshot(driver, "falha_pagina_destino.png")
+                        break
+                else:
+                    logger.error("Não foi possível clicar no botão 'Acessar'")
+                    salvar_screenshot(driver, "falha_botao_acessar.png")
+                    break
+            else:
+                logger.error("Falha no processo de login")
+                salvar_screenshot(driver, "falha_login.png")
+                break
+        
+        except Exception as e:
+            logger.error(f"Erro durante a automação: {e}")
+            logger.error(traceback.format_exc())
+            
+            if 'driver' in locals():
+                salvar_screenshot(driver, "erro_execucao.png")
+                logger.info("Screenshot do erro salvo em logs/imagens/erro_execucao.png")
+                salvar_html(driver, "pagina_erro")
+            
+            logger.error("\nSUGESTÕES PARA RESOLVER O PROBLEMA:")
+            logger.error("1. Certifique-se de que o arquivo .env existe e contém as variáveis necessárias")
+            logger.error("2. Verifique se sua conexão com a internet está estável")
+            logger.error("3. Tente acessar o site manualmente para confirmar que está funcionando")
+            
+            # Em caso de erro, pergunta se quer tentar a próxima nota
+            tentar_proxima = input("Houve erro nesta nota. Deseja tentar a próxima? (s/n): ")
+            if tentar_proxima.lower() != 's':
+                break
+            
+        finally:
+            # Fecha o navegador após processar cada nota
+            if 'driver' in locals():
+                driver.quit()
+                logger.info("Navegador fechado após processar nota.")
+                
+        # Recarrega os dados do Excel para capturar possíveis atualizações
+        df_excel = carregar_dados_excel(EXCEL_PATH)

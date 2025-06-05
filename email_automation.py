@@ -21,7 +21,7 @@ load_dotenv()
 # Configurações
 PASTA_ENTRADA = './entrada'
 LAYOUT_EMAIL_FILE = './layout_email.txt'
-ARQUIVO_EXCEL_INFO = './informacoes_notas.xlsx'
+ARQUIVO_EXCEL_INFO = 'C:\\Users\\pesqu\\OneDrive\\LAF\\Adm_Fioravanso\\Planejamentos_Controles\\Financeiro\\_Controle NotaFiscal.xlsx'
 
 # Funções auxiliares
 def renomear_arquivos(pasta, empresa_map=None):
@@ -118,26 +118,41 @@ def renomear_arquivos(pasta, empresa_map=None):
 
 
 def ler_informacoes_excel(arquivo_excel):
-    df = pd.read_excel(arquivo_excel, engine='openpyxl')
-    # Verifica colunas necessárias
-    expected = ['Numero', 'Email', 'Empresa (reduzido)']
-    for col in expected:
-        if col not in df.columns:
-            logger.error(f"Coluna '{col}' não encontrada no Excel.")
-            return []
-    # Tratar e converter
-    df['Numero'] = pd.to_numeric(df['Numero'], errors='coerce')
-    df = df.dropna(subset=['Numero'])
-    df['Numero'] = df['Numero'].astype(int)
-    # Construir lista de dicionários
-    informacoes = []
-    for _, row in df.iterrows():
-        informacoes.append({
-            'Numero': int(row['Numero']),
-            'Email': row['Email'],
-            'Empresa_reduzido': str(row['Empresa (reduzido)']).strip()
-        })
-    return informacoes
+    try:
+        df = pd.read_excel(arquivo_excel, engine='openpyxl')
+        logger.info(f"Arquivo Excel lido com sucesso. Colunas encontradas: {df.columns.tolist()}")
+        
+        # Verifica colunas necessárias - usando os nomes exatos das colunas como aparecem no Excel
+        expected = ['NÚMERO DAS NOTAS', 'E-MAIL\nResponsável', 'Nome Reduzido']
+        logger.info(f"Procurando pelas colunas: {expected}")
+        
+        for col in expected:
+            if col not in df.columns:
+                logger.error(f"Coluna '{col}' não encontrada no Excel. Colunas encontradas: {df.columns.tolist()}")
+                return []
+        
+        logger.info("Todas as colunas necessárias foram encontradas.")
+        
+        # Tratar e converter
+        df['NÚMERO DAS NOTAS'] = pd.to_numeric(df['NÚMERO DAS NOTAS'], errors='coerce')
+        df = df.dropna(subset=['NÚMERO DAS NOTAS'])
+        df['NÚMERO DAS NOTAS'] = df['NÚMERO DAS NOTAS'].astype(int)
+        
+        # Construir lista de dicionários - mapeando as colunas para os campos esperados pelo código
+        informacoes = []
+        for _, row in df.iterrows():
+            informacoes.append({
+                'Numero': int(row['NÚMERO DAS NOTAS']),
+                'Email': str(row['E-MAIL\nResponsável']).strip() if pd.notna(row['E-MAIL\nResponsável']) else '',
+                'Empresa_reduzido': str(row['Nome Reduzido']).strip() if pd.notna(row['Nome Reduzido']) else ''
+            })
+        
+        logger.info(f"Processadas {len(informacoes)} linhas do Excel.")
+        return informacoes
+        
+    except Exception as e:
+        logger.error(f"Erro ao ler arquivo Excel: {e}")
+        return []
 
 
 def ler_layout_email(arquivo_layout):
@@ -219,21 +234,23 @@ if __name__ == '__main__':
 
     # 5. Criar rascunhos
     count_sucesso = 0
-    count_falha = 0
+    count_sem_arquivos = 0
+    count_email_invalido = 0
+    
     for info in informacoes:
         numero = int(info['Numero'])
         email_dest = info['Email']
         # Ignorar email inválido
         if not isinstance(email_dest, str) or not email_dest.strip():
-            logger.warning(f"Email inválido para nota {numero}: {email_dest}")
-            count_falha += 1
+            logger.debug(f"Email inválido ou ausente para nota {numero}: '{email_dest}'")
+            count_email_invalido += 1
             continue
 
         # Obter arquivos já mapeados por número da nota
         arquivos = arquivos_por_nota.get(numero, [])
         if not arquivos:
-            logger.warning(f'Nenhum arquivo para nota {numero}.')
-            count_falha += 1
+            logger.debug(f'Nenhum arquivo encontrado para nota {numero} (provavelmente já enviada).')
+            count_sem_arquivos += 1
             continue
 
         # Definir assunto
@@ -262,7 +279,16 @@ if __name__ == '__main__':
         )
         if success:
             count_sucesso += 1
+            logger.info(f"Rascunho criado com sucesso para nota {numero}")
         else:
-            count_falha += 1
+            logger.error(f"Falha ao criar rascunho para nota {numero}")
+            count_email_invalido += 1
 
-    logger.info(f'Rascunhos criados: {count_sucesso}, falhas: {count_falha}')
+    # Relatório final mais detalhado
+    total_notas = len(informacoes)
+    logger.info(f'=== RESUMO DA EXECUÇÃO ===')
+    logger.info(f'Total de notas processadas: {total_notas}')
+    logger.info(f'Rascunhos criados com sucesso: {count_sucesso}')
+    logger.info(f'Notas sem arquivos (provavelmente já enviadas): {count_sem_arquivos}')
+    logger.info(f'Notas com email inválido ou erro de criação: {count_email_invalido}')
+    logger.info(f'Percentual de sucesso (notas com arquivos): {(count_sucesso / (count_sucesso + count_email_invalido) * 100):.1f}%' if (count_sucesso + count_email_invalido) > 0 else 'N/A')

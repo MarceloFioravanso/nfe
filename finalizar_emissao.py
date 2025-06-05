@@ -341,8 +341,22 @@ def clicar_emitir(driver, logger=None):
         # Aguarda um momento para que a página esteja completamente carregada
         esperar_pagina_carregar(driver, 10, logger)
         
-        # Lista de seletores para o botão "Emitir"
+        logger.info("Tentando método avançado para clicar no botão 'Emitir'...")
+        if clicar_emitir_avancado(driver, logger, max_tentativas=3, espera=1):
+            logger.info("Botão 'Emitir' clicado com sucesso usando método avançado!")
+            return True
+            
+        logger.warning("Método avançado falhou. Tentando método tradicional...")
+        
+        # Lista de seletores para o botão "Emitir" (mantida para compatibilidade)
         seletores_emitir = [
+            # Seletor exato do HTML problemático
+            'button.__estrutura_componente_base.botao.botao-com-variante.estrutura_botao.disabled_user_select.estrutura_botao_colorido',
+            'button[name="confirmar"]',
+            'button[myaccesskey="e"]',
+            'button[disabledenableaftersubmit="enable"]',
+            
+            # Seletores existentes
             'button[name="emitir"]',
             'button[name="botao_emitir"]',
             'button.__estrutura_componente_base.botao.botao-com-variante.estrutura_botao[name="emitir"]',
@@ -357,7 +371,7 @@ def clicar_emitir(driver, logger=None):
             'button.__estrutura_componente_base.botao.botao-com-variante'
         ]
         
-        # Tenta encontrar e clicar no botão "Emitir"
+        # Tenta encontrar e clicar no botão "Emitir" (método tradicional como fallback)
         botao_emitir = None
         for seletor in seletores_emitir:
             try:
@@ -492,6 +506,169 @@ def clicar_emitir(driver, logger=None):
         logger.error(traceback.format_exc())
         salvar_screenshot(driver, "erro_excecao_botao_emitir.png", logger)
         return False
+
+# Função avançada para clicar no botão Emitir utilizando múltiplas estratégias
+def clicar_emitir_avancado(driver, logger=None, max_tentativas=3, espera=1):
+    """
+    Tenta clicar no botão 'Emitir' usando múltiplas estratégias avançadas
+    
+    Args:
+        driver: WebDriver do Selenium
+        logger: Logger para registrar informações (opcional)
+        max_tentativas: Número máximo de tentativas para cada método de clique
+        espera: Tempo de espera entre tentativas em segundos
+        
+    Returns:
+        bool: True se o clique foi bem-sucedido, False caso contrário
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+        
+    logger.info("Tentando clicar no botão 'Emitir' com método avançado...")
+    
+    # Seletores para o botão Emitir
+    seletores = [
+        # Seletor exato do HTML problemático
+        'button.__estrutura_componente_base.botao.botao-com-variante.estrutura_botao.disabled_user_select.estrutura_botao_colorido',
+        'button[name="confirmar"]',
+        'button[myaccesskey="e"]',
+        'button[disabledenableaftersubmit="enable"]',
+        
+        # Seletores alternativos
+        'button[name="emitir"]',
+        'button[name="botao_emitir"]',
+        'button.__estrutura_componente_base.botao.botao-com-variante.estrutura_botao[name="emitir"]',
+        'button.estrutura_botao_emitir',
+        'button.botao_emitir'
+    ]
+    
+    # XPaths baseados no texto do botão
+    xpaths = [
+        "//button[contains(text(), 'Emitir')]",
+        "//button[normalize-space()='Emitir']",
+        "//button[starts-with(@name, 'confirm')]",
+        "//button[@myaccesskey='e']",
+        "//span[contains(text(), 'Emitir')]/parent::button"
+    ]
+    
+    # Tenta cada seletor CSS
+    for seletor in seletores:
+        try:
+            # Espera pelo elemento ficar visível primeiro (com timeout curto para não travar muito)
+            try:
+                WebDriverWait(driver, 3).until(
+                    EC.visibility_of_element_located((By.CSS_SELECTOR, seletor))
+                )
+                logger.info(f"Botão 'Emitir' ficou visível com seletor: {seletor}")
+            except Exception as e:
+                logger.debug(f"Timeout aguardando elemento ficar visível: {e}")
+            
+            # Mesmo se o wait falhar, tenta localizar diretamente
+            elementos = driver.find_elements(By.CSS_SELECTOR, seletor)
+            elementos_visiveis = [e for e in elementos if e.is_displayed()]
+            
+            if elementos_visiveis:
+                elemento = elementos_visiveis[0]
+                logger.info(f"Botão 'Emitir' encontrado com seletor: {seletor}")
+                
+                # Rola até o elemento para garantir que esteja visível
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elemento)
+                time.sleep(espera)
+                
+                # Tenta diferentes métodos de clique
+                metodos = [
+                    {"nome": "clique direto", "func": lambda e=elemento: e.click()},
+                    {"nome": "JavaScript", "func": lambda e=elemento: driver.execute_script("arguments[0].click();", e)},
+                    {"nome": "ActionChains", "func": lambda e=elemento: ActionChains(driver).move_to_element(e).click().perform()},
+                    {"nome": "JavaScript avançado", "func": lambda e=elemento: driver.execute_script(
+                        """
+                        var evt = new MouseEvent('click', {
+                            bubbles: true,
+                            cancelable: true,
+                            view: window
+                        });
+                        arguments[0].dispatchEvent(evt);
+                        """, 
+                        e
+                    )},
+                    {"nome": "submit form", "func": lambda e=elemento: driver.execute_script(
+                        """
+                        var form = arguments[0].closest('form');
+                        if (form) form.submit();
+                        """, 
+                        e
+                    )}
+                ]
+                
+                for metodo in metodos:
+                    for tentativa in range(max_tentativas):
+                        try:
+                            logger.info(f"Tentando clicar com método: {metodo['nome']} (tentativa {tentativa+1}/{max_tentativas})")
+                            metodo["func"]()
+                            logger.info(f"Botão 'Emitir' clicado com sucesso via {metodo['nome']}")
+                            
+                            # Aguarda a página carregar
+                            time.sleep(2)
+                            
+                            # Tenta detectar se houve mudança de página
+                            try:
+                                WebDriverWait(driver, 5).until(
+                                    lambda d: "confirmação" in d.page_source.lower() or "nota emitida" in d.page_source.lower()
+                                )
+                                logger.info("Detectada página de confirmação após clique no botão Emitir")
+                            except:
+                                logger.debug("Não foi possível confirmar mudança de página, mas continuando")
+                            
+                            # Salva screenshot para verificação
+                            salvar_screenshot(driver, f"emitir_clicado_{metodo['nome'].replace(' ', '_')}.png", logger)
+                            
+                            return True
+                            
+                        except Exception as e:
+                            logger.warning(f"Clique via {metodo['nome']} falhou na tentativa {tentativa+1}: {e}")
+                            time.sleep(espera)
+                            continue
+        
+        except Exception as e:
+            logger.debug(f"Erro ao procurar botão 'Emitir' com seletor {seletor}: {e}")
+    
+    # Se os seletores CSS falharem, tenta por XPath
+    for xpath in xpaths:
+        try:
+            elementos = driver.find_elements(By.XPATH, xpath)
+            elementos_visiveis = [e for e in elementos if e.is_displayed()]
+            
+            if elementos_visiveis:
+                elemento = elementos_visiveis[0]
+                logger.info(f"Botão 'Emitir' encontrado com XPath: {xpath}")
+                
+                # Rola até o elemento
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elemento)
+                time.sleep(espera)
+                
+                try:
+                    elemento.click()
+                    logger.info("Botão 'Emitir' clicado com sucesso via XPath")
+                    time.sleep(2)
+                    salvar_screenshot(driver, "emitir_clicado_xpath.png", logger)
+                    return True
+                except Exception as e:
+                    logger.warning(f"Clique direto por XPath falhou, tentando via JavaScript: {e}")
+                    try:
+                        driver.execute_script("arguments[0].click();", elemento)
+                        logger.info("Botão 'Emitir' clicado via JavaScript (XPath)")
+                        time.sleep(2)
+                        salvar_screenshot(driver, "emitir_clicado_xpath_js.png", logger)
+                        return True
+                    except Exception as e2:
+                        logger.warning(f"Clique via JavaScript (XPath) falhou: {e2}")
+                
+        except Exception as e:
+            logger.debug(f"Erro ao procurar botão 'Emitir' com XPath {xpath}: {e}")
+    
+    logger.error("Botão 'Emitir' não encontrado por nenhum método")
+    salvar_screenshot(driver, "erro_botao_emitir_nao_encontrado.png", logger)
+    return False
 
 def finalizar_emissao_nota(driver, logger=None):
     """
