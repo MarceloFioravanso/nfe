@@ -268,8 +268,11 @@ if __name__ == '__main__':
         corpo = layout
         corpo = corpo.replace('{{SAUDACAO}}', saudacao)
         corpo = corpo.replace('{{ARQUIVO}}', ', '.join(os.path.basename(a) for a in arquivos))
-        # Substituir número da nota se no layout
         corpo = corpo.replace('{{NUMERO_NOTA}}', str(numero))
+
+        # Remover assinatura fixa (se houver) para permitir assinatura padrão do Outlook
+        # Exemplo: se houver uma assinatura fixa no layout, remova-a ou comente a linha abaixo
+        # corpo = corpo.replace('{{ASSINATURA}}', 'Assinatura fixa aqui')  # Remova esta linha se existir
 
         success = manager.create_draft_with_attachments(
             to_email=email_dest,
