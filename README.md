@@ -1,13 +1,32 @@
-# Automação de E-mails para Notas Fiscais
+# Automação NFSe - Projeto Limpo e Organizado
 
-Este projeto automatiza o envio de e-mails com notas fiscais anexadas, utilizando a biblioteca `exchangelib` para interagir com o Exchange.
+Este projeto contém dois sistemas principais:
+1. **Automação de Emissão de NFSe** - Para emitir notas fiscais automaticamente
+2. **Automação de E-mails** - Para enviar e-mails com notas fiscais anexadas
 
-## Estrutura do Projeto
-- `email_automation.py`: Script principal para renomear arquivos, criar rascunhos de e-mail e processar informações.
-- `entrada/`: Pasta onde os arquivos PDF e XML devem ser colocados.
-- `layout_email.txt`: Modelo de e-mail utilizado para criar os rascunhos.
-- `informacoes_notas.xlsx`: Arquivo Excel com as informações das notas e e-mails dos destinatários.
-- `emails_encontrados.xlsx`: Arquivo Excel gerado com os e-mails encontrados nos últimos 3 anos.
+## 📁 Estrutura do Projeto (Após Limpeza - 06/06/2025)
+
+### Scripts Principais
+- `nfs_emissao_auto.py`: Automação completa de emissão de NFSe
+- `email_automation.py`: Automação de envio de e-mails com anexos
+
+### Módulos Core
+- `exchange_manager.py`: Gerenciador de conexões Exchange
+- `preencher_dados_servico.py`: Preenchimento de dados de serviço
+- `busca_empresa.py`: Busca de empresas por CNPJ
+- `preencher_tributos.py`: Preenchimento de tributos
+
+### Configuração e Dados
+- `requirements.txt`: Dependências do projeto
+- `.env`: Variáveis de ambiente (credenciais)
+- `layout_email.txt`: Template de e-mail
+- `informacoes_notas.xlsx`: Dados das notas fiscais
+- `entrada/`: Pasta para arquivos PDF e XML
+- `logs/`: Logs e capturas de tela
+
+### Arquivo
+- `_archive/`: Arquivos antigos organizados por categoria
+- `LIMPEZA_PROJETO.md`: Documentação da limpeza realizada
 
 ## Configuração
 1. Crie um arquivo `.env` com as seguintes variáveis de ambiente:
