@@ -677,21 +677,39 @@ def preencher_descricao_servico(driver, dados_nota, logger=None):
             if venc_direto and not pd.isna(venc_direto):
                 if isinstance(venc_direto, pd.Timestamp) or hasattr(venc_direto, 'strftime'):
                     vencimento = venc_direto.strftime("%d/%m/%Y")
-                
-        # Obtém o número da parcela (da coluna AL)
-        parcela = dados_nota.get('parcela', '')        # Adiciona informações complementares à descrição do serviço
+                  # Obtém o número da parcela (da coluna AL)
+        parcela = dados_nota.get('parcela', '')
+          # Obtém o número do pedido ou ordem de compra
+        numero_pedido = dados_nota.get('numero_pedido', '')
+        
+        # Remove casas decimais do número do pedido, se for um número
+        if numero_pedido and not pd.isna(numero_pedido):
+            try:
+                # Tenta converter para float e depois para int para remover casas decimais
+                if isinstance(numero_pedido, (int, float)) or (isinstance(numero_pedido, str) and numero_pedido.replace('.', '', 1).isdigit()):
+                    numero_pedido = str(int(float(numero_pedido)))
+            except:
+                # Se falhar, mantém o valor original
+                pass
+        
+        # Adiciona informações complementares à descrição do serviço
         descricao_completa = [descricao_servico]
         
         # Adiciona linha em branco após a descrição principal
         descricao_completa.append("")
+        
+        # Adiciona informações de número de pedido (com linha em branco após), somente se válido
+        if numero_pedido and not pd.isna(numero_pedido):
+            descricao_completa.append(f"Nº PEDIDO/ORDEM DE COMPRA: {numero_pedido}")
+            descricao_completa.append("")
         
         # Adiciona informações de vencimento (com linha em branco após)
         if vencimento:
             descricao_completa.append(f"VENCIMENTO: {vencimento}")
             descricao_completa.append("")
             
-        # Adiciona informações de parcela (com linha em branco após)
-        if parcela:
+        # Adiciona informações de parcela (com linha em branco após), somente se válido
+        if parcela and not pd.isna(parcela):
             descricao_completa.append(f"PARCELA: {parcela}")
             descricao_completa.append("")
         

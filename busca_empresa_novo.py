@@ -52,7 +52,8 @@ def buscar_empresa_por_cnpj(driver, cnpj, nome_empresa, logger=None):
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
-      # Formata o CNPJ para exibição segura
+    
+    # Formata o CNPJ para exibição segura
     cnpj_exibicao = f"{cnpj[:4]}****{cnpj[-2:]}" if len(cnpj) > 6 else "****"
     
     try:
@@ -61,7 +62,16 @@ def buscar_empresa_por_cnpj(driver, cnpj, nome_empresa, logger=None):
         
         # Procura pelo campo de busca de CNPJ/Razão Social com uma lista ampliada de seletores
         campo_busca_seletores = [
-            'input[name="Tomador.nomeRazao"]'
+            'input[name="Tomador.nomeRazao"]',
+            'input[id*="CNPJ"]',
+            'input[id*="cnpj"]',
+            'input[name*="CNPJ"]',
+            'input[name*="cnpj"]',
+            'input[placeholder*="CNPJ"]',
+            'input[placeholder*="Razão"]',
+            'input[placeholder*="razao"]',
+            'input[aria-label*="CNPJ"]',
+            'input[aria-label*="Razão"]'
         ]
         
         campo_busca = None
@@ -76,19 +86,39 @@ def buscar_empresa_por_cnpj(driver, cnpj, nome_empresa, logger=None):
                 logger.warning(f"Erro ao procurar campo com seletor {seletor}: {e}")
         
         if not campo_busca:
+            # Tenta buscar por XPath se os seletores CSS não funcionarem
+            try:
+                xpath_seletores = [
+                    "//input[contains(@name, 'CNPJ') or contains(@name, 'cnpj')]",
+                    "//label[contains(text(), 'CNPJ') or contains(text(), 'Razão')]/following::input[1]",
+                    "//div[contains(text(), 'CNPJ') or contains(text(), 'Razão')]/following::input[1]"
+                ]
+                
+                for xpath in xpath_seletores:
+                    elementos = driver.find_elements(By.XPATH, xpath)
+                    if elementos:
+                        campo_busca = elementos[0]
+                        logger.info(f"Campo de busca de CNPJ encontrado com XPath: {xpath}")
+                        break
+            except Exception as e:
+                logger.warning(f"Erro ao procurar campo com XPath: {e}")
+        
+        if not campo_busca:
             logger.error("Campo de busca de CNPJ/Razão Social não encontrado")
             salvar_screenshot_auxiliar(driver, "erro_campo_busca_cnpj_nao_encontrado.png")
             return False
-          # Clica no campo de busca
+        
+        # Clica no campo de busca
         campo_busca.click()
-        time.sleep(0.5)
+        time.sleep(1)  # Aumentado para 1 segundo
         
         # Limpa o campo e insere o CNPJ
         campo_busca.clear()
         simular_digitacao_humana_auxiliar(campo_busca, cnpj)
         logger.info(f"CNPJ inserido no campo de busca")
         salvar_screenshot_auxiliar(driver, "apos_inserir_cnpj.png")
-          # Aguarda os resultados com tempo maior para garantir carregamento completo
+        
+        # Aguarda os resultados com tempo maior para garantir carregamento completo
         logger.info("Procurando resultados da busca de CNPJ...")
         time.sleep(6)  # Aumentado para 6 segundos
         salvar_screenshot_auxiliar(driver, "resultados_busca.png")
@@ -129,13 +159,21 @@ def buscar_empresa_por_cnpj(driver, cnpj, nome_empresa, logger=None):
                 return True
                 
             return False
-          # Busca específica por td com name="nomeRazao" ou qualquer célula de tabela com o nome/CNPJ
+        
+        # Busca específica por td com name="nomeRazao" ou qualquer célula de tabela com o nome/CNPJ
         try:
             logger.info("Tentando localizar células com os dados da empresa...")
             
-            # Lista simplificada de seletores principais para células que podem conter resultados
+            # Lista ampliada de seletores para células que podem conter resultados
             celulas_seletores = [
-                'td[name="nomeRazao"]'
+                'td[name="nomeRazao"]',
+                'td',  # Qualquer célula de tabela
+                'tr',  # Qualquer linha de tabela
+                'li',  # Qualquer item de lista
+                'div[class*="resultado"]',  # Divs de resultado
+                'div[class*="item"]',  # Divs de item
+                'div[class*="empresa"]',  # Divs relacionados a empresa
+                'span[class*="empresa"]'  # Spans relacionados a empresa
             ]
             
             # Tenta cada seletor em ordem até encontrar a empresa
@@ -157,6 +195,9 @@ def buscar_empresa_por_cnpj(driver, cnpj, nome_empresa, logger=None):
                         logger.info(f"Empresa encontrada: {texto_elemento}")
                         salvar_screenshot_auxiliar(driver, "empresa_encontrada.png")
                         
+                        # Aguarda um momento antes de tentar clicar
+                        time.sleep(1)
+                        
                         # Tenta clicar diretamente primeiro (método que está funcionando)
                         try:
                             elemento.click()
@@ -175,8 +216,44 @@ def buscar_empresa_por_cnpj(driver, cnpj, nome_empresa, logger=None):
                                 return True
                             except Exception as js_error:
                                 logger.error(f"Clique via JavaScript também falhou: {js_error}")
+                                
+                                # Tenta uma última abordagem: simular tecla ENTER
+                                try:
+                                    from selenium.webdriver.common.keys import Keys
+                                    campo_busca.send_keys(Keys.ENTER)
+                                    logger.info("Tentou selecionar empresa pressionando ENTER")
+                                    time.sleep(3)  # Espera maior após pressionar ENTER
+                                    salvar_screenshot_auxiliar(driver, "apos_pressionar_enter.png")
+                                    return True
+                                except Exception as enter_error:
+                                    logger.error(f"Tentativa de pressionar ENTER também falhou: {enter_error}")
         except Exception as e:
             logger.error(f"Erro ao buscar por células com dados da empresa: {e}")
+            
+        # Verifica também botões de seleção ou de busca
+        try:
+            logger.info("Tentando localizar botões de busca ou seleção...")
+            botoes_seletores = [
+                'button[type="submit"]',
+                'input[type="submit"]',
+                'button:contains("Buscar")',
+                'button:contains("Selecionar")',
+                'a:contains("Selecionar")'
+            ]
+            
+            for seletor in botoes_seletores:
+                try:
+                    elementos = driver.find_elements(By.CSS_SELECTOR, seletor)
+                    if elementos:
+                        botao = elementos[0]
+                        logger.info(f"Tentando clicar no botão: {botao.text if botao.text else 'sem texto'}")
+                        botao.click()
+                        time.sleep(3)
+                        salvar_screenshot_auxiliar(driver, "apos_clicar_botao_busca.png")
+                except Exception as e:
+                    logger.warning(f"Erro ao clicar no botão: {e}")
+        except Exception as e:
+            logger.error(f"Erro ao buscar por botões: {e}")
         
         logger.error(f"Empresa '{nome_empresa}' não encontrada nos resultados da busca")
         salvar_screenshot_auxiliar(driver, "empresa_nao_encontrada.png")
@@ -191,8 +268,31 @@ def buscar_empresa_por_cnpj(driver, cnpj, nome_empresa, logger=None):
 def preencher_busca_cnpj(driver, cnpj, nome_empresa, logger=None):
     """
     Função auxiliar para ser chamada diretamente no script principal.
+    Implementa múltiplas tentativas para melhorar robustez.
     """
+    MAX_TENTATIVAS = 3
+    
     # Adiciona um log para depuração sempre que essa função for chamada
     if logger:
-        logger.info(f"INICIANDO BUSCA ÚNICA DA EMPRESA: {nome_empresa}")
-    return buscar_empresa_por_cnpj(driver, cnpj, nome_empresa, logger)
+        logger.info(f"INICIANDO BUSCA DA EMPRESA: {nome_empresa}")
+    
+    # Loop para fazer múltiplas tentativas
+    for tentativa in range(1, MAX_TENTATIVAS + 1):
+        if logger:
+            logger.info(f"Tentativa {tentativa} de {MAX_TENTATIVAS} para buscar empresa")
+        
+        resultado = buscar_empresa_por_cnpj(driver, cnpj, nome_empresa, logger)
+        if resultado:
+            return True
+        
+        # Se não encontrou, espera um pouco e tenta novamente
+        if tentativa < MAX_TENTATIVAS:
+            if logger:
+                logger.info(f"Aguardando 5 segundos para nova tentativa...")
+            time.sleep(5)
+    
+    # Se chegou aqui, todas as tentativas falharam
+    if logger:
+        logger.warning(f"Todas as {MAX_TENTATIVAS} tentativas de busca da empresa falharam")
+    
+    return False

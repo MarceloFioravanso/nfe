@@ -987,13 +987,12 @@ def carregar_dados_excel(caminho_excel):
     try:
         logger.info(f"Carregando dados do arquivo Excel: {caminho_excel}")
         
-        # Verifica se o arquivo existe
         if not os.path.exists(caminho_excel):
             logger.error(f"Arquivo Excel não encontrado: {caminho_excel}")
             return None
-          # Carrega o arquivo Excel
-        # Assume que os dados estão na primeira planilha, com cabeçalho na linha 3 (índice 2)
-        df = pd.read_excel(caminho_excel, sheet_name=0, header=2)
+        
+        # Altere header para 0, pois agora o cabeçalho está na primeira linha
+        df = pd.read_excel(caminho_excel, sheet_name=0, header=0)
         
         logger.info(f"Arquivo Excel carregado com sucesso. {len(df)} linhas encontradas.")
         logger.info(f"Colunas disponíveis: {list(df.columns)}")
@@ -1006,7 +1005,7 @@ def carregar_dados_excel(caminho_excel):
 
 def encontrar_proxima_nota(df):
     """
-    Encontra a próxima nota a ser processada (última linha sem número na primeira coluna mas com dados válidos).
+    Encontra a próxima nota a ser processada (primeira linha sem número na primeira coluna mas com dados válidos).
     
     Args:
         df (pd.DataFrame): DataFrame com os dados do Excel
@@ -1020,32 +1019,31 @@ def encontrar_proxima_nota(df):
             return None
         
         logger.info("Procurando a próxima nota a ser processada...")
-        
-        # Assumindo que a primeira coluna contém os números das notas
+          # Assumindo que a primeira coluna contém os números das notas
         primeira_coluna = df.columns[0]
         logger.info(f"Analisando coluna: {primeira_coluna}")
         
-        # Encontra a última linha sem número mas que tenha dados válidos
-        for idx in reversed(range(len(df))):
+        # Encontra a primeira linha sem número mas que tenha dados válidos
+        for idx in range(len(df)):
             linha = df.iloc[idx]
             numero_nota = linha[primeira_coluna]
             empresa = linha['Empresa - Razão Social']
             cnpj = linha['CNPJ']
-            
-            # Verifica se o número da nota está vazio
+              # Verifica se o número da nota está vazio
             numero_vazio = pd.isna(numero_nota) or numero_nota == "" or numero_nota is None
             
             # Verifica se a linha tem dados válidos (empresa ou CNPJ)
             tem_dados = not (pd.isna(empresa) and pd.isna(cnpj))
             
             if numero_vazio and tem_dados:
-                logger.info(f"Encontrada linha sem número na posição {idx + 1} (linha {idx + 3} do Excel)")
+                logger.info(f"Encontrada linha sem número na posição {idx + 1} (linha {idx + 2} do Excel)")
                 
                 # Retorna os dados desta linha como dicionário
                 dados_nota = linha.to_dict()
                 
-                # Log dos dados encontrados (mascarando informações sensíveis)
-                logger.info("Dados da próxima nota a ser processada:")
+                # Log dos dados encontrados (mascarando informações sensíveis)                logger.info("Dados da próxima nota a ser processada:")
+                logger.info(f"  Empresa: {linha['Empresa - Razão Social']}")
+                
                 for coluna, valor in dados_nota.items():
                     if pd.notna(valor) and valor != "":
                         # Mascarar CNPJ se necessário
@@ -1056,11 +1054,11 @@ def encontrar_proxima_nota(df):
                         logger.info(f"  {coluna}: {valor_log}")
                 
                 return {
-                    'linha_excel': idx + 3,  # +3 porque pandas é 0-based, Excel começa na linha 1, e temos 2 linhas de header
+                    'linha_excel': idx + 2,  # +2 porque pandas é 0-based, Excel começa na linha 1, e temos 1 linha de header
                     'dados': dados_nota
                 }
         
-        logger.warning("Não foi encontrada nenhuma linha sem número com dados válidos. Todas as notas podem já ter sido processadas.")
+        logger.warning("Não foi encontrada nenhuma linha sem número com dados válidos. Todas as notas podem já ter sido processadas ou não há notas pendentes.")
         return None
         
     except Exception as e:
@@ -1107,12 +1105,12 @@ def mapear_dados_nota(dados_nota):
             'pis': dados_nota.get('PIS (0,65%)', 0),
             'cofins': dados_nota.get('Cofins (3%)', 0),
             'csll': dados_nota.get('Contr. Social - CSLL (1%)', 0),            'total_impostos': dados_nota.get('Total Impostos', 0),
-            'valor_liquido': dados_nota.get('Líquido', 0),
-            # Campos adicionais para a descrição do serviço
+            'valor_liquido': dados_nota.get('Líquido', 0),            # Campos adicionais para a descrição do serviço
             'vencimento_dia': dados_nota.get('Dia Venc.', ''),    # Coluna para dia do vencimento
             'vencimento_mes': dados_nota.get('Mês Venc.', ''),    # Coluna para mês do vencimento
             'vencimento_ano': dados_nota.get('Ano Venc.', ''),    # Coluna para ano do vencimento
-            'parcela': dados_nota.get('Parcela', '')              # Coluna para número da parcela
+            'parcela': dados_nota.get('Parcela', ''),             # Coluna para número da parcela
+            'numero_pedido': dados_nota.get('Número do Pedido ou Ordem de Compra', '')  # Coluna para número do pedido
         }
           # Validações básicas
         campos_obrigatorios = ['cnpj_tomador', 'razao_social', 'valor_servico', 'descricao_servico']
@@ -1189,14 +1187,12 @@ def atualizar_numero_nota_excel(caminho_excel, linha_excel, numero_nota):
             
         except ImportError:
             # Se openpyxl não estiver instalado, usa pandas como fallback
-            logger.warning("Biblioteca openpyxl não encontrada. Usando pandas como alternativa.")
-            
-            # Carrega o arquivo Excel com pandas (pode perder alguma formatação)
-            df = pd.read_excel(caminho_excel, sheet_name=0, header=2)
+            logger.warning("Biblioteca openpyxl não encontrada. Usando pandas como alternativa.")            # Carrega o arquivo Excel com pandas (pode perder alguma formatação)
+            df = pd.read_excel(caminho_excel, sheet_name=0, header=0)
             
             # Calcula o índice do DataFrame (0-based)
-            # Ajusta o índice considerando o header=2
-            indice_df = linha_excel - 3
+            # Converte linha Excel (1-based) para índice DataFrame (0-based)
+            indice_df = linha_excel - 2
             
             if indice_df < 0 or indice_df >= len(df):
                 logger.error(f"Linha {linha_excel} está fora do intervalo válido do DataFrame (índice {indice_df})")
@@ -2008,121 +2004,82 @@ def procurar_e_clicar(driver, seletores, texto_botao=None, max_tentativas=3, esp
     salvar_screenshot(driver, "erro_elemento_nao_encontrado.png")
     return False
 
-def extrair_numero_nota_fiscal(driver):
+def extrair_numero_nota_fiscal(driver, df=None, linha_atual=None):
     """
-    Extrai o número da nota fiscal da página de confirmação
+    Determina o próximo número da nota fiscal na sequência com base no último número existente no Excel.
+    
+    Args:
+        driver: WebDriver do Selenium (mantido por compatibilidade)
+        df: DataFrame com os dados do Excel (opcional)
+        linha_atual: Índice da linha atual sendo processada (opcional)
+        
+    Returns:
+        str: Próximo número da nota fiscal na sequência
+    """
+    logger.info("Definindo próximo número da nota fiscal com base na sequência...")
+    
+    try:
+        # Se o DataFrame não foi fornecido, carrega novamente do arquivo Excel
+        if df is None:
+            try:
+                from pathlib import Path
+                import pandas as pd
+                
+                # Tenta encontrar o arquivo Excel no diretório atual
+                excel_path = EXCEL_PATH
+                df = pd.read_excel(excel_path)
+                logger.info(f"DataFrame carregado do Excel: {excel_path}")
+            except Exception as e:
+                logger.error(f"Erro ao carregar Excel para determinar número da nota: {e}")
+                return None
+        
+        if df is None or df.empty:
+            logger.error("DataFrame vazio ou não carregado")
+            return None
+            
+        # Pega a primeira coluna (onde ficam os números das notas)
+        primeira_coluna = df.columns[0]
+        
+        # Filtra apenas valores não vazios e converte para números quando possível
+        numeros_nota = []
+        for valor in df[primeira_coluna]:
+            if pd.notna(valor) and str(valor).strip() != '':
+                try:
+                    # Tenta converter para número inteiro
+                    numeros_nota.append(int(float(valor)))
+                except (ValueError, TypeError):
+                    # Se não for número, tenta extrair números da string
+                    import re
+                    numeros = re.findall(r'\d+', str(valor))
+                    if numeros:
+                        try:
+                            numeros_nota.append(int(numeros[0]))
+                        except (ValueError, IndexError):
+                            pass
+        
+        # Se encontrou números de nota, pega o maior e incrementa
+        if numeros_nota:
+            ultimo_numero = max(numeros_nota)
+            proximo_numero = ultimo_numero + 1
+            logger.info(f"Último número de nota encontrado: {ultimo_numero}. Próximo número: {proximo_numero}")
+            return str(proximo_numero)
+        else:
+            # Se não encontrou nenhum número, começa do 1
+            logger.warning("Nenhum número de nota encontrado no Excel. Iniciando do número 1.")
+            return "1"
+    
+    except Exception as e:
+        logger.error(f"Erro ao determinar próximo número da nota: {e}")
+        return None
+
+
+def salvar_html_confirmacao(driver):
+    """
+    Salva o HTML da página de confirmação para análise posterior
     
     Args:
         driver: WebDriver do Selenium
-        
-    Returns:
-        str: Número da nota fiscal ou None se não encontrado
     """
-    logger.info("Tentando extrair número da nota fiscal...")
-    
-    # Lista de seletores possíveis para encontrar o número da nota
-    seletores_numero = [
-        # Campos de input que podem conter o número
-        'input[name*="numero"]',
-        'input[id*="numero"]',
-        'input[name*="nota"]',
-        'input[id*="nota"]',
-        
-        # Spans ou divs que podem exibir o número
-        'span[id*="numero"]',
-        'div[id*="numero"]',
-        'span[class*="numero"]',
-        'div[class*="numero"]',
-        
-        # Labels que podem mostrar o número
-        'label[for*="numero"]',
-        'label[class*="numero"]'
-    ]
-    
-    # XPaths para buscar por texto
-    xpaths_numero = [
-        "//div[contains(text(), 'Número da nota')]//following-sibling::*",
-        "//span[contains(text(), 'Número da nota')]//following-sibling::*",
-        "//label[contains(text(), 'Número da nota')]//following-sibling::*",
-        "//div[contains(text(), 'Número:')]//following-sibling::*",
-        "//span[contains(text(), 'Número:')]//following-sibling::*",
-        "//div[contains(text(), 'NFS-e:')]//following-sibling::*",
-        "//span[contains(text(), 'NFS-e:')]//following-sibling::*",
-        "//div[contains(text(), 'Nota Fiscal:')]//following-sibling::*",
-        "//span[contains(text(), 'Nota Fiscal:')]//following-sibling::*",
-        
-        # Busca direta por elementos que contenham números
-        "//div[contains(text(), 'Número da nota:')]/text()[normalize-space()]",
-        "//span[contains(text(), 'Número da nota:')]/text()[normalize-space()]",
-        "//p[contains(text(), 'Número da nota:')]/text()[normalize-space()]"
-    ]
-    
-    # Padrões regex para extrair números
-    import re
-    padrao_numero = re.compile(r'\b\d{3,}\b')  # Busca por números com pelo menos 3 dígitos
-    
-    # Tenta encontrar através de seletores CSS
-    for seletor in seletores_numero:
-        try:
-            elementos = driver.find_elements(By.CSS_SELECTOR, seletor)
-            for elemento in elementos:
-                if elemento.is_displayed():
-                    # Tenta obter o valor do elemento
-                    valor = elemento.get_attribute('value') or elemento.text.strip()
-                    if valor:
-                        numeros_encontrados = padrao_numero.findall(valor)
-                        if numeros_encontrados:
-                            numero = numeros_encontrados[0]
-                            logger.info(f"Número da nota encontrado via seletor {seletor}: {numero}")
-                            return numero
-        except Exception as e:
-            logger.debug(f"Erro ao procurar número com seletor {seletor}: {e}")
-    
-    # Tenta encontrar através de XPaths
-    for xpath in xpaths_numero:
-        try:
-            elementos = driver.find_elements(By.XPATH, xpath)
-            for elemento in elementos:
-                if elemento.is_displayed():
-                    texto = elemento.text.strip()
-                    if texto:
-                        numeros_encontrados = padrao_numero.findall(texto)
-                        if numeros_encontrados:
-                            numero = numeros_encontrados[0]
-                            logger.info(f"Número da nota encontrado via XPath {xpath}: {numero}")
-                            return numero
-        except Exception as e:
-            logger.debug(f"Erro ao procurar número com XPath {xpath}: {e}")
-    
-    # Busca mais ampla no texto da página
-    try:
-        body_text = driver.find_element(By.TAG_NAME, "body").text
-        
-        # Procura por padrões específicos no texto
-        padroes_busca = [
-            r'Número da nota[:\s]+(\d{3,})',
-            r'NFS-e[:\s]+(\d{3,})',
-            r'Nota Fiscal[:\s]+(\d{3,})',
-            r'Número[:\s]+(\d{3,})',
-            r'emitida com sucesso[.\s]*(\d{3,})',
-            r'gerada com sucesso[.\s]*(\d{3,})'
-        ]
-        
-        for padrao in padroes_busca:
-            match = re.search(padrao, body_text, re.IGNORECASE)
-            if match:
-                numero = match.group(1)
-                logger.info(f"Número da nota encontrado no texto da página com padrão '{padrao}': {numero}")
-                return numero
-    
-    except Exception as e:
-        logger.debug(f"Erro ao buscar número no texto da página: {e}")
-    
-    # Se chegou aqui, não conseguiu encontrar o número
-    logger.warning("Não foi possível extrair o número da nota fiscal automaticamente")
-    salvar_screenshot(driver, "falha_extrair_numero_nota.png")
-    
-    # Salva o HTML da página para análise posterior
     try:
         html_content = driver.page_source
         with open("logs/html/pagina_confirmacao_nota.html", "w", encoding="utf-8") as f:
@@ -2458,17 +2415,15 @@ def main():
                                                     if emitir_sucesso:
                                                         logger.info("NOTA FISCAL EMITIDA COM SUCESSO!")
                                                         salvar_screenshot(driver, "nota_emitida.png")
-                                                        
-                                                        # Aguarda um tempo para ter certeza que a página de confirmação carregou
+                                                          # Aguarda um tempo para ter certeza que a página de confirmação carregou
                                                         logger.info("Aguardando carregamento da página de confirmação...")
                                                         time.sleep(5)
-                                                        
-                                                        # Extrai o número da nota fiscal
-                                                        logger.info("Tentando extrair o número da nota fiscal...")
-                                                        numero_nota = extrair_numero_nota_fiscal(driver)
+                                                          # Determina o próximo número da nota fiscal na sequência
+                                                        logger.info("Determinando próximo número da nota fiscal...")
+                                                        numero_nota = extrair_numero_nota_fiscal(driver, df_excel, linha_excel)
                                                         
                                                         if numero_nota:
-                                                            logger.info(f"NÚMERO DA NOTA EXTRAÍDO COM SUCESSO: {numero_nota}")
+                                                            logger.info(f"NÚMERO DA NOTA DETERMINADO: {numero_nota}")
                                                             
                                                             # Atualiza o número da nota no Excel
                                                             logger.info(f"Atualizando Excel com o número da nota: {numero_nota}")
