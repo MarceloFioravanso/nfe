@@ -20,6 +20,12 @@ import platform
 import pandas as pd
 from pathlib import Path
 from preencher_dados_servico import preencher_dados_servico
+import pyperclip
+from selenium.webdriver.common.keys import Keys
+
+# Criar diretório de logs se não existir
+logs_dir = os.path.join(os.path.dirname(__file__), 'logs')
+os.makedirs(logs_dir, exist_ok=True)
 
 # Configuração de log
 logging.basicConfig(
@@ -53,6 +59,12 @@ def salvar_screenshot(driver, nome_arquivo):
 # Instala automaticamente o ChromeDriver compatível
 logger.info("Verificando e instalando ChromeDriver compatível...")
 chromedriver_autoinstaller.install()
+
+# Reduz logs desnecessários do Selenium e bibliotecas relacionadas
+import logging
+logging.getLogger('selenium.webdriver.remote.remote_connection').setLevel(logging.WARNING)
+logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
+logging.getLogger('selenium.webdriver.common.service').setLevel(logging.WARNING)
 
 # Carrega .env
 logger.info("Carregando variáveis de ambiente do arquivo .env...")
@@ -115,6 +127,35 @@ def simular_digitacao_humana(elemento, texto):
     
     # Pausa final após completar a digitação
     time.sleep(random.uniform(0.2, 0.5))
+
+def simular_colar_texto(elemento, texto):
+    """Simula colar texto usando Ctrl+V após copiar para o clipboard"""
+    try:
+        # Limpa o campo primeiro
+        elemento.clear()
+        time.sleep(0.1)
+        
+        # Copia o texto para o clipboard
+        pyperclip.copy(texto)
+        time.sleep(0.1)
+        
+        # Clica no elemento para garantir que está focado
+        elemento.click()
+        time.sleep(0.1)
+        
+        # Simula Ctrl+V para colar
+        elemento.send_keys(Keys.CONTROL + 'v')
+        
+        # Pequena pausa após colar
+        time.sleep(random.uniform(0.2, 0.5))
+        
+        logger.info(f"Texto colado com sucesso (length: {len(texto)})")
+        
+    except Exception as e:
+        logger.error(f"Erro ao colar texto: {e}")
+        # Fallback para digitação normal em caso de erro
+        logger.info("Usando fallback para digitação normal...")
+        simular_digitacao_humana(elemento, texto)
 
 def verificar_mensagens_erro(driver):
     """
@@ -499,12 +540,12 @@ def realizar_login(driver, cpf_cnpj, senha):
         logger.info("Preenchendo CPF/CNPJ...")
         cpf_input.click()
         time.sleep(random.uniform(0.1, 0.3))
-        simular_digitacao_humana(cpf_input, cpf_cnpj)
+        simular_colar_texto(cpf_input, cpf_cnpj)
         
         logger.info("Preenchendo senha...")
         senha_input.click()
         time.sleep(random.uniform(0.1, 0.3))
-        simular_digitacao_humana(senha_input, senha)
+        simular_colar_texto(senha_input, senha)
         
         # Captura estado antes do login
         salvar_screenshot(driver, "antes_login.png")
@@ -1272,7 +1313,7 @@ def buscar_empresa_por_cnpj(driver, cnpj, nome_empresa):
         
         # Limpa o campo e insere o CNPJ
         campo_busca.clear()
-        simular_digitacao_humana(campo_busca, cnpj)
+        simular_colar_texto(campo_busca, cnpj)
         logger.info(f"CNPJ inserido no campo de busca")
         salvar_screenshot(driver, "apos_inserir_cnpj.png")
         
@@ -1891,7 +1932,7 @@ def procurar_e_clicar(driver, seletores, texto_botao=None, max_tentativas=3, esp
             f"//a[contains(text(), '{texto_botao}')]",
             f"//span[contains(text(), '{texto_botao}')]/parent::button"
         ]
-    
+    logger.info(f"Usando seletores: {todos_seletores}")
     # Tenta cada seletor CSS fornecido
     for seletor in todos_seletores:
         try:
@@ -2139,6 +2180,31 @@ def main():
             chrome_opts = Options()
             chrome_opts.add_argument("--start-maximized")
             chrome_opts.add_argument("--disable-notifications")
+            
+            # Argumentos para reduzir logs desnecessários
+            chrome_opts.add_argument("--disable-logging")
+            chrome_opts.add_argument("--log-level=3")  # Só mostra erros críticos
+            chrome_opts.add_argument("--disable-dev-shm-usage")
+            chrome_opts.add_argument("--no-sandbox")
+            chrome_opts.add_argument("--disable-gpu-sandbox")
+            chrome_opts.add_argument("--disable-software-rasterizer")
+            chrome_opts.add_argument("--disable-background-timer-throttling")
+            chrome_opts.add_argument("--disable-backgrounding-occluded-windows")
+            chrome_opts.add_argument("--disable-renderer-backgrounding")
+            chrome_opts.add_argument("--disable-features=TranslateUI")
+            chrome_opts.add_argument("--disable-features=VizDisplayCompositor")
+            chrome_opts.add_argument("--disable-extensions")
+            chrome_opts.add_argument("--disable-plugins")
+            chrome_opts.add_argument("--disable-default-apps")
+            chrome_opts.add_argument("--disable-sync")
+            chrome_opts.add_argument("--no-first-run")
+            chrome_opts.add_argument("--no-default-browser-check")
+            chrome_opts.add_argument("--disable-background-networking")
+            chrome_opts.add_argument("--disable-component-update")
+            
+            # Configurações experimentais para reduzir ruído
+            chrome_opts.add_experimental_option('excludeSwitches', ['enable-logging'])
+            chrome_opts.add_experimental_option('useAutomationExtension', False)
             
             # Inicia o navegador
             driver = webdriver.Chrome(options=chrome_opts)

@@ -22,3 +22,5 @@ exchangelib>=4.7.0
 # Dependências opcionais
 pillow>=9.0.0  # Para processamento de imagens/captchas
 requests>=2.27.0  # Para requisições HTTP
+pyperclip>=1.8.0  # Para operações de colar texto na área de transferência
+PyPDF2>=3.0.0  # Para manipulação e extração de dados de arquivos PDF

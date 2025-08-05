@@ -124,6 +124,62 @@ def simular_digitacao_humana(elemento, texto, pressionar_enter=False, pressionar
         # Aguarda o processamento após pressionar TAB
         time.sleep(1)
 
+def simular_colar_texto(elemento, texto):
+    """
+    Simula o comando "colar" (Ctrl+V) para inserir texto rapidamente.
+    Ideal para campos de descrição longos onde a digitação character por character seria muito lenta.
+    
+    Args:
+        elemento: Elemento web onde será colado o texto
+        texto: Texto a ser colado
+    """
+    from selenium.webdriver.common.keys import Keys
+    
+    try:
+        import pyperclip
+        
+        # Limpa o campo primeiro
+        elemento.clear()
+        time.sleep(0.2)
+        
+        # Copia o texto para a área de transferência
+        pyperclip.copy(texto)
+        time.sleep(0.1)
+        
+        # Clica no elemento para garantir o foco
+        elemento.click()
+        time.sleep(0.2)
+        
+        # Simula Ctrl+V para colar
+        elemento.send_keys(Keys.CONTROL, 'v')
+        time.sleep(0.5)
+        
+        # Pausa final
+        time.sleep(random.uniform(0.2, 0.5))
+        
+    except ImportError:
+        # Se pyperclip não estiver disponível, usa JavaScript como fallback
+        logging.warning("pyperclip não disponível, usando JavaScript como alternativa")
+        
+        # Limpa o campo
+        elemento.clear()
+        time.sleep(0.2)
+        
+        # Clica no elemento para garantir o foco
+        elemento.click()
+        time.sleep(0.2)
+        
+        # Usa send_keys diretamente como alternativa mais confiável
+        elemento.send_keys(texto)
+        time.sleep(0.5)
+        
+    except Exception as e:
+        # Em caso de erro, volta para digitação normal mas mais rápida
+        logging.warning(f"Erro ao colar texto, usando digitação direta: {e}")
+        elemento.clear()
+        elemento.send_keys(texto)
+        time.sleep(0.5)
+
 # Mantém a antiga função para compatibilidade
 simular_digitacao_humana_servico = simular_digitacao_humana
 
@@ -776,8 +832,9 @@ def preencher_descricao_servico(driver, dados_nota, logger=None):
         # Preenche a descrição do serviço
         try:
             campo_descricao.clear()
-            simular_digitacao_humana(campo_descricao, descricao_servico)
-            logger.info(f"Descrição do serviço preenchida com sucesso")
+            # Usa a função de colar para descrições longas (mais rápido)
+            simular_colar_texto(campo_descricao, descricao_servico)
+            logger.info(f"Descrição do serviço preenchida com sucesso usando método 'colar'")
             return True
         except Exception as e:
             logger.error(f"Erro ao preencher descrição do serviço: {e}")
